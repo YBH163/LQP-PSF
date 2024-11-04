@@ -133,6 +133,7 @@ class CartPole():
     def obs(self):
         """Returns the observation from the environment in the format (x, x_dot, theta, theta_dot, x_ref)."""
         return torch.cat([t.unsqueeze(-1) for t in [self.x, self.x_dot, self.theta, self.theta_dot, self.x_ref]], dim=-1)
+        # obs_dim: (bs,5)
 
     def cost(self, state_error=None, u=None):
         """Computes and returns the cost based on the state and control input.

@@ -9,9 +9,9 @@ import os
 import numpy as np
 
 class A2CQPUnrolled(A2CBuilder.Network):
-    def __init__(self, params, **kwargs):
-        self.actions_num = kwargs.pop('actions_num')
-        input_shape = kwargs.pop('input_shape')
+    def __init__(self, params, **kwargs):   # where to find the kwargs??
+        self.actions_num = kwargs.pop('actions_num')    # equals the key "m" in env_creators.py?
+        input_shape = kwargs.pop('input_shape')     # equals the obs_dim in certain env?
         self.value_size = kwargs.pop('value_size', 1)
 
         NetworkBuilder.BaseNetwork.__init__(self)

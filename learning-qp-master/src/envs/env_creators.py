@@ -5,8 +5,8 @@ from .cartpole import CartPole
 
 sys_param = {
     "double_integrator": {
-        "n": 2,
-        "m": 1,
+        "n": 2, # state_num
+        "m": 1, # action_num
         "A": np.array([
             [1.0, 1.0],
             [0.0, 1.0],
