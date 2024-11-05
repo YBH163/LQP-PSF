@@ -182,6 +182,19 @@ class QPUnrolledNetwork(nn.Module):
 
         # When running batch testing, mask envs already done, to speed up computation (implemented for robust mpc); initialized at inference time since batch size is not known during initialization
         self.is_active = None
+        
+        self.eps = 1e-6     # a very small number
+        # 创建一个对角线元素全为 eps 的对角阵
+        P = torch.full((n_qp, n_qp), self.eps)
+        # 将第一行第一列的元素设置为 1
+        P[0, 0] = 1        # only work for action_dim = 1
+        P = P.to(device)
+        self.P = P
+        P_inv= torch.full((n_qp, n_qp), 1/self.eps)
+        # 将第一行第一列的元素设置为 1
+        P[0, 0] = 1        
+        P_inv = P_inv.to(device)
+        self.Pinv = P_inv    # shape: (nqp,nqp)
 
 
     def initialize_solver(self):
@@ -195,8 +208,8 @@ class QPUnrolledNetwork(nn.Module):
             self.solver = QPSolver(self.device, n_qp_actual, m_qp_actual, warm_starter=self.warm_starter_delayed, is_warm_starter_trainable=False, symmetric_constraint=self.symmetric, buffered=self.force_feasible)
         else:
             # Should be called after loading state dict
-            Pinv, H = self.get_PH()
-            self.solver = QPSolver(self.device, n_qp_actual, m_qp_actual, Pinv=Pinv.squeeze(0), H=H.squeeze(0), warm_starter=self.warm_starter_delayed, is_warm_starter_trainable=False, symmetric_constraint=self.symmetric, buffered=self.force_feasible)
+            # Pinv, H = self.get_PH()
+            self.solver = QPSolver(self.device, n_qp_actual, m_qp_actual, Pinv=self.Pinv, H=H.squeeze(0), warm_starter=self.warm_starter_delayed, is_warm_starter_trainable=False, symmetric_constraint=self.symmetric, buffered=self.force_feasible)
 
     def compute_warm_starter_loss(self, q, b, Pinv, H, solver_Xs):
         qd, bd, Pinvd, Hd = map(lambda t: t.detach() if t is not None else None, [q, b, Pinv, H])
@@ -338,7 +351,7 @@ class QPUnrolledNetwork(nn.Module):
                 torch.cat([zeros_n.transpose(1, 2), I], dim=2)
             ], dim=1)
             Pinv, H = tilde_P_inv, tilde_H
-        return Pinv, H
+        return Pinv, H  # 如果 self.shared_PH 为 True 且 self.force_feasible 为 False，则维度为 (1, m_qp, n_qp)...
 
     def get_qb(self, x, mlp_out=None):
         """
@@ -372,6 +385,7 @@ class QPUnrolledNetwork(nn.Module):
         return q, b
 
     def forward(self, x, return_problem_params=False, info=None):
+        bs = x.shape[0]
         if info is not None:
             self.env_info = info
         if self.mpc_baseline is not None:
@@ -385,7 +399,7 @@ class QPUnrolledNetwork(nn.Module):
             if self.solver is None:
                 self.initialize_solver()
 
-            bs = x.shape[0]
+            # bs = x.shape[0]
 
             # Run MLP forward pass, if necessary
             if self.mlp is not None:
@@ -395,7 +409,8 @@ class QPUnrolledNetwork(nn.Module):
 
             # Compute P, H, if they are not fixed
             if not self.fixed_PH:
-                Pinv, H = self.get_PH(mlp_out)
+                # Pinv, H = self.get_PH(mlp_out)
+                Pinv = self.Pinv.unsqueeze(0).repeat(bs, 1, 1)  # shape: (bs,nqp,nqp)
             else:
                 Pinv, H = None, None
 
