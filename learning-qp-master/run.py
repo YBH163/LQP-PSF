@@ -14,7 +14,8 @@ from rl_games.common import env_configurations, vecenv
 from rl_games.torch_runner import Runner
 from rl_games.algos_torch import model_builder
 
-from src.envs.env_creators import env_creators, sys_param
+# from src.envs.env_creators import env_creators, sys_param
+from src.psf.integrated_env_creators import integrated_env_creators
 from src.envs.mpc_baseline_parameters import get_mpc_baseline_parameters
 from src.utils.rlgame_utils import RLGPUEnv, RLGPUAlgoObserver
 from src.networks.a2c_qp_unrolled import A2CQPUnrolledBuilder
@@ -117,7 +118,7 @@ vecenv.register('RLGPU',
                 lambda config_name, num_actors, **kwargs: RLGPUEnv(config_name, num_actors, **kwargs))
 env_configurations.register('rlgpu', {
     'vecenv_type': 'RLGPU',
-    'env_creator': lambda **env_config: env_creators[args.env](
+    'env_creator': lambda **env_config: integrated_env_creators[args.env](
         **blacklist_keys(default_env_config, env_config.keys()),
         **env_config,
     ),

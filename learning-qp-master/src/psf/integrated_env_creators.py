@@ -62,30 +62,9 @@ class Integrated_env:
     def get_num_parallel(self):
         return self.env.get_num_parallel()
 
-# 使用示例
-env_name = "cartpole"  # 可以是 "double_integrator", "tank", "cartpole"
-kwargs = {
-    "parameters": {
-        "dt": 0.1,
-        "m_cart": [0.7, 1.3],
-        "m_pole": [0.07, 0.13],
-        "l": [0.4, 0.7],
-    },
-    "Q": np.diag([1., 1e-4, 1., 1e-4]),
-    "R": np.array([[1e-4]]),
-    "noise_std": 0.5,
-    "x_min": -2,
-    "x_max": 2,
-    "u_min": -10,
-    "u_max": 10,
-    "bs": 1,
-    "barrier_thresh": 0.1,
-    "max_steps": 500,
-    "device": "cuda:0",
-    "random_seed": 42,
-    "quiet": False,
-    "keep_stats": False,
-    "reward_shaping_parameters": {},
-    "run_name": "test_run",
+
+integrated_env_creators = {
+    "double_integrator": lambda **kwargs: Integrated_env("double_integrator", **kwargs),
+    "tank": lambda **kwargs: Integrated_env("tank", **kwargs),
+    "cartpole": lambda **kwargs: Integrated_env("cartpole", **kwargs),
 }
-integrated_env_creators = Integrated_env(env_name, **kwargs)
