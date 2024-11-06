@@ -209,6 +209,7 @@ class QPUnrolledNetwork(nn.Module):
         else:
             # Should be called after loading state dict
             # Pinv, H = self.get_PH()
+            H = self.get_H()
             self.solver = QPSolver(self.device, n_qp_actual, m_qp_actual, Pinv=self.Pinv, H=H.squeeze(0), warm_starter=self.warm_starter_delayed, is_warm_starter_trainable=False, symmetric_constraint=self.symmetric, buffered=self.force_feasible)
 
     def compute_warm_starter_loss(self, q, b, Pinv, H, solver_Xs):
@@ -313,6 +314,36 @@ class QPUnrolledNetwork(nn.Module):
             return sol, None
 
 
+    def get_H(self, mlp_out=None):
+        """
+        Compute H matrices from the parameters.
+        """
+        # Decode MLP output
+        end = 0
+        if not self.shared_PH:
+            start = end
+            end = start + self.n_H_param
+            H_params = mlp_out[:, start:end]
+        else:
+            H_params = self.H_params.unsqueeze(0)
+
+        # Reshape H vector into matrices
+        H = H_params.view(-1, self.m_qp, self.n_qp)
+
+        # If the problem is forced to be feasible, compute the parameters (\tilde{P}, \tilde{H}) of the augmented problem
+        # \tilde{P} = [P, 0; 0, lambda]
+        if self.force_feasible:
+            zeros_n = torch.zeros((1, self.n_qp, 1), device=self.device)
+            I = torch.eye(1, device=self.device).unsqueeze(0)
+            # \tilde{H} = [H, I; 0, I]
+            ones_m = torch.ones((1, self.m_qp, 1), device=self.device)
+            tilde_H = torch.cat([
+                torch.cat([H, ones_m], dim=2),
+                torch.cat([zeros_n.transpose(1, 2), I], dim=2)
+            ], dim=1)
+            H = tilde_H
+        return H
+
     def get_PH(self, mlp_out=None):
         """
         Compute P, H matrices from the parameters.
@@ -411,6 +442,7 @@ class QPUnrolledNetwork(nn.Module):
             if not self.fixed_PH:
                 # Pinv, H = self.get_PH(mlp_out)
                 Pinv = self.Pinv.unsqueeze(0).repeat(bs, 1, 1)  # shape: (bs,nqp,nqp)
+                H = self.get_H(mlp_out)
             else:
                 Pinv, H = None, None
 
