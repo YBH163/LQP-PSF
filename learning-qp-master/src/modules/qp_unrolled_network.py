@@ -470,9 +470,17 @@ class QPUnrolledNetwork(nn.Module):
             else:
                 Pinv, H = None, None
 
-            # Compute q, b
-            # q, b = self.get_qb(x, mlp_out)
+            # Compute b, q
+            # q, b = self.get_qb(x, mlp_out)            
             b = self.get_b(x, mlp_out)
+            
+            # 获取 x 的最后一个数据，并增加新的维度，生成形状为 (batch_size, 1) 的张量
+            ud = x[:, -1].unsqueeze(-1)
+            # 创建一个形状为 (batch_size, n_qp) 的全零张量
+            q_vector = torch.zeros(bs, self.n_qp)
+            # 将 last_data_unsqueezed 赋值给 result_vector 的第一个元素
+            q_vector[:, 0] = -ud.squeeze(-1)  # 赋值并去除多余的维度
+            q = q_vector
 
             # Update parameters of warm starter with a delay to stabilize training
             if self.train_warm_starter:
