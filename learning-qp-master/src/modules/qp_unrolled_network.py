@@ -135,7 +135,7 @@ class QPUnrolledNetwork(nn.Module):
             self.qb_affine_layer = None
         else:
             if not self.strict_affine_layer:
-                self.qb_affine_layer = nn.Linear(input_size, self.n_q_param + self.n_b_param, bias=not self.symmetric)
+                self.qb_affine_layer = nn.Linear(input_size, self.n_b_param, bias=not self.symmetric)
             else:
                 self.qb_affine_layer = StrictAffineLayer(input_size, self.n_qp, self.m_qp, self.obs_has_half_ref)
 
@@ -344,6 +344,30 @@ class QPUnrolledNetwork(nn.Module):
             H = tilde_H
         return H
 
+    def get_b(self, x, mlp_out=None):
+        """
+        Compute b vector from the parameters.
+        """
+        bs = x.shape[0]
+        end = self.n_H_param if not self.shared_PH else 0
+        if not self.affine_qb:
+            start = end
+            end = start + self.n_b_param
+            b = mlp_out[:, start:end]
+        else:
+            b_out = self.qb_affine_layer(x)
+            b = b_out[:, :self.n_b_param]
+        if self.no_b:
+            b = torch.zeros((bs, self.m_qp), device=self.device)
+
+        # If the problem is forced to be feasible, compute the parameters (\tilde{q}, \tilde{b}) of the augmented problem
+        if self.force_feasible:
+            zeros_1 = torch.zeros((bs, 1), device=self.device)
+            # \tilde{b} = [b; 0]
+            tilde_b = torch.cat([b, zeros_1], dim=1)
+            b = tilde_b
+        return b
+
     def get_PH(self, mlp_out=None):
         """
         Compute P, H matrices from the parameters.
@@ -447,7 +471,8 @@ class QPUnrolledNetwork(nn.Module):
                 Pinv, H = None, None
 
             # Compute q, b
-            q, b = self.get_qb(x, mlp_out)
+            # q, b = self.get_qb(x, mlp_out)
+            b = self.get_b(x, mlp_out)
 
             # Update parameters of warm starter with a delay to stabilize training
             if self.train_warm_starter:
