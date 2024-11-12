@@ -3,6 +3,7 @@ import torch
 from src.envs.linear_system import LinearSystem
 from src.envs.cartpole import CartPole
 from src.envs.env_creators import env_creators, sys_param
+import gym
 
 class Integrated_env:
     def __init__(self, env_name, **kwargs):
@@ -10,6 +11,22 @@ class Integrated_env:
         self.env = env_creators[env_name](**kwargs)
         self.bs = self.env.bs
         self.device = self.env.device
+        
+        # Gym environment settings
+        self.action_space = self.env.action_space
+        original_shape = self.env.observation_space.shape
+        new_shape = (original_shape[0] + 1,)    # different
+        # 定义新的 observation_space
+        self.observation_space = gym.spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=new_shape,
+            dtype=self.env.observation_space.dtype
+        )
+        # self.observation_space = self.env.observation_space
+        self.state_space = self.observation_space
+        self.num_states = self.env.num_states + self.env.num_actions    # different
+        self.num_actions = self.env.num_actions
     
     def get_ud(self):
         # generate randomly (only work for action_dim = 1)
@@ -18,7 +35,10 @@ class Integrated_env:
         return ud
     
     def reset(self, *args, **kwargs):
-        return self.env.reset(*args, **kwargs)
+        init_obs = self.env.reset(*args, **kwargs)
+        init_ud = self.get_ud()
+        combined_obs = torch.cat((init_obs, init_ud.unsqueeze(-1)), dim=-1)
+        return combined_obs
     
     def done(self):
         return self.env.done()

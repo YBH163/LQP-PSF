@@ -185,14 +185,14 @@ class QPUnrolledNetwork(nn.Module):
         
         self.eps = 1e-6     # a very small number
         # 创建一个对角线元素全为 eps 的对角阵
-        P = torch.full((n_qp, n_qp), self.eps)
+        P = torch.diag(torch.full((n_qp,), self.eps))
         # 将第一行第一列的元素设置为 1
         P[0, 0] = 1        # only work for action_dim = 1
         P = P.to(device)
         self.P = P
-        P_inv= torch.full((n_qp, n_qp), 1/self.eps)
+        P_inv= torch.diag(torch.full((n_qp,), 1/self.eps))
         # 将第一行第一列的元素设置为 1
-        P[0, 0] = 1        
+        P_inv[0, 0] = 1        
         P_inv = P_inv.to(device)
         self.Pinv = P_inv    # shape: (nqp,nqp)
 
@@ -210,7 +210,17 @@ class QPUnrolledNetwork(nn.Module):
             # Should be called after loading state dict
             # Pinv, H = self.get_PH()
             H = self.get_H()
-            self.solver = QPSolver(self.device, n_qp_actual, m_qp_actual, Pinv=self.Pinv, H=H.squeeze(0), warm_starter=self.warm_starter_delayed, is_warm_starter_trainable=False, symmetric_constraint=self.symmetric, buffered=self.force_feasible)
+            Pinv = self.Pinv.unsqueeze(0).repeat(1, 1, 1)  # shape: (1,nqp,nqp)
+            if self.force_feasible:
+                # \tilde{P} = [P, 0; 0, lambda]
+                zeros_n = torch.zeros((1, self.n_qp, 1), device=self.device)
+                I = torch.eye(1, device=self.device).unsqueeze(0)
+                tilde_P_inv = torch.cat([
+                    torch.cat([Pinv, zeros_n], dim=2),
+                    torch.cat([zeros_n.transpose(1, 2), 1 / self.feasible_lambda * I], dim=2)
+                ], dim=1)
+                self.Pinv = tilde_P_inv
+            self.solver = QPSolver(self.device, n_qp_actual, m_qp_actual, Pinv=self.Pinv.squeeze(0), H=H.squeeze(0), warm_starter=self.warm_starter_delayed, is_warm_starter_trainable=False, symmetric_constraint=self.symmetric, buffered=self.force_feasible)
 
     def compute_warm_starter_loss(self, q, b, Pinv, H, solver_Xs):
         qd, bd, Pinvd, Hd = map(lambda t: t.detach() if t is not None else None, [q, b, Pinv, H])
@@ -465,7 +475,17 @@ class QPUnrolledNetwork(nn.Module):
             # Compute P, H, if they are not fixed
             if not self.fixed_PH:
                 # Pinv, H = self.get_PH(mlp_out)
-                Pinv = self.Pinv.unsqueeze(0).repeat(bs, 1, 1)  # shape: (bs,nqp,nqp)
+                # Pinv = self.Pinv.unsqueeze(0).repeat(bs, 1, 1)  # shape: (bs,nqp,nqp)
+                Pinv = self.Pinv.unsqueeze(0).repeat(1, 1, 1)  # shape: (1,nqp,nqp)
+                if self.force_feasible:
+                    # \tilde{P} = [P, 0; 0, lambda]
+                    zeros_n = torch.zeros((1, self.n_qp, 1), device=self.device)
+                    I = torch.eye(1, device=self.device).unsqueeze(0)
+                    tilde_P_inv = torch.cat([
+                        torch.cat([Pinv, zeros_n], dim=2),
+                        torch.cat([zeros_n.transpose(1, 2), 1 / self.feasible_lambda * I], dim=2)
+                    ], dim=1)
+                    Pinv = tilde_P_inv
                 H = self.get_H(mlp_out)
             else:
                 Pinv, H = None, None
@@ -477,10 +497,15 @@ class QPUnrolledNetwork(nn.Module):
             # 获取 x 的最后一个数据，并增加新的维度，生成形状为 (batch_size, 1) 的张量
             ud = x[:, -1].unsqueeze(-1)
             # 创建一个形状为 (batch_size, n_qp) 的全零张量
-            q_vector = torch.zeros(bs, self.n_qp)
+            q_vector = torch.zeros((bs, self.n_qp), device=self.device)
             # 将 last_data_unsqueezed 赋值给 result_vector 的第一个元素
             q_vector[:, 0] = -ud.squeeze(-1)  # 赋值并去除多余的维度
             q = q_vector
+            if self.force_feasible:
+                zeros_1 = torch.zeros((bs, 1), device=self.device)
+                # \tilde{q} = [q; 0]
+                tilde_q = torch.cat([q, zeros_1], dim=1)
+                q = tilde_q
 
             # Update parameters of warm starter with a delay to stabilize training
             if self.train_warm_starter:

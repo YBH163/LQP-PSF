@@ -157,14 +157,15 @@ run_and_delay() {
 
 # Finally run all the tasks
 
-run_and_delay test_mpc_all
-run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 8
-run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 16
-run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 32
-run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 64
+# run_and_delay test_mpc_all
+# run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 8
+# run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 16
+# run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 32
+# run_and_delay train_and_test train_mlp test_mlp 50 0.05 2 64
+
 run_and_delay train_and_test train_qp test_qp 50 0.05 2 4 24
-run_and_delay train_and_test train_qp test_qp 50 0.05 2 8 48
-run_and_delay train_and_test train_qp test_qp 50 0.05 2 16 96
+# run_and_delay train_and_test train_qp test_qp 50 0.05 2 8 48
+# run_and_delay train_and_test train_qp test_qp 50 0.05 2 16 96
 
 wait
 
