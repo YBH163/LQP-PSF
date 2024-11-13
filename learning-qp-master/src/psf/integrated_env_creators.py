@@ -58,10 +58,10 @@ class Integrated_env:
         return self.env.cost(*args, **kwargs)
     
     def reward(self):
-        original_reward = self.env.reward()
+        original_reward = -self.env.safe_cost()
         deviation = torch.norm(self.ud - self.env.u, p=2) ** 2
         coef_deviation = 1.0
-        deviation_cost = coef_deviation * deviation
+        deviation_cost = - coef_deviation * deviation
         combined_reward = original_reward + deviation_cost
         return combined_reward
     

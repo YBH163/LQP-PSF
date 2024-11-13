@@ -90,6 +90,12 @@ class CartPole():
         self.u_min = u_min
         self.u_max = u_max
         self.bs = bs
+        
+        # Safety constraints
+        self.x_threshold_min = self.x_min
+        self.x_threshold_max = self.x_max
+        self.theta_threshold_min = self.theta_min / 2.0
+        self.theta_threshold_max = self.theta_max / 2.0
 
         # States, references, inputs
         batch_zeros = lambda shape: torch.zeros((bs,) + shape, dtype=torch.float32, device=device)
@@ -175,6 +181,12 @@ class CartPole():
             ic(avg_rew_main, avg_rew_done, avg_rew_steady, avg_rew_total)
 
         return rew_total
+
+    def safe_cost(self):
+        return int(self.x < self.x_threshold_min \
+            or self.x > self.x_threshold_max \
+            or self.theta < self.theta_threshold_min \
+            or self.theta > self.theta_threshold_max)
 
     def done(self):
         """Returns whether the episode has terminated."""
