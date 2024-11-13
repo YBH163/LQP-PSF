@@ -12,6 +12,8 @@ class Integrated_env:
         self.bs = self.env.bs
         self.device = self.env.device
         self.train_or_test = kwargs["train_or_test"]
+        self.u_min = self.env.u_min
+        self.u_max = self.env.u_max
         
         # Gym environment settings
         self.action_space = self.env.action_space
@@ -30,14 +32,28 @@ class Integrated_env:
         self.num_actions = self.env.num_actions
     
     def get_ud(self):
-        # generate randomly (only work for action_dim = 1)
-        ud = self.env.u_min + (self.env.u_max - self.env.u_min) * torch.rand(self.env.bs, device=self.device)
+        x, x_dot, theta, theta_dot, x_ref = self.env.obs()
+        if self.train_or_test == "train":
+            # generate randomly (only work for action_dim = 1)
+            ud = self.env.u_min + (self.env.u_max - self.env.u_min) * torch.rand(self.env.bs, device=self.device)
+        elif self.train_or_test == "test":
+            # bang-bang control
+            # 当 theta 大于 0 度时，u 应该小于 0；当 theta 小于 0 度时，u 应该大于 0
+            if theta >= 0.2 :
+                ud = self.u_min
+            elif theta <= -0.2 :
+                ud = self.u_max
+            else:
+                ud = 0  
         self.ud = ud
         return ud
     
     def reset(self, *args, **kwargs):
         init_obs = self.env.reset(*args, **kwargs)
-        init_ud = self.get_ud()
+        if self.train_or_test == "train":
+            init_ud = self.get_ud()
+        elif self.train_or_test == "test":
+            init_ud = 0     # cuz initial theta is small (0.1)
         combined_obs = torch.cat((init_obs, init_ud.unsqueeze(-1)), dim=-1)
         return combined_obs
     
