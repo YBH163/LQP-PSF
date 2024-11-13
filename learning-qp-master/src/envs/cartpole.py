@@ -183,10 +183,12 @@ class CartPole():
         return rew_total
 
     def safe_cost(self):
-        return int(self.x < self.x_threshold_min \
+        safe_cost = int(self.x < self.x_threshold_min \
             or self.x > self.x_threshold_max \
             or self.theta < self.theta_threshold_min \
             or self.theta > self.theta_threshold_max)
+        self.info_dict["safe_cost"] =safe_cost
+        return safe_cost
 
     def done(self):
         """Returns whether the episode has terminated."""
