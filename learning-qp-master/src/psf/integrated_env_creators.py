@@ -11,6 +11,7 @@ class Integrated_env:
         self.env = env_creators[env_name](**kwargs)
         self.bs = self.env.bs
         self.device = self.env.device
+        self.train_or_test = kwargs["train_or_test"]
         
         # Gym environment settings
         self.action_space = self.env.action_space
