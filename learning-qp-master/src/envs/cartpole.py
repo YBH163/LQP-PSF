@@ -183,10 +183,8 @@ class CartPole():
         return rew_total
 
     def safe_cost(self):
-        safe_cost = int(self.x < self.x_threshold_min \
-            or self.x > self.x_threshold_max \
-            or self.theta < self.theta_threshold_min \
-            or self.theta > self.theta_threshold_max)
+        # safe_cost = int(self.x < self.x_threshold_min or self.x > self.x_threshold_max or self.theta < self.theta_threshold_min or self.theta > self.theta_threshold_max)
+        safe_cost = ((self.x < self.x_threshold_min) | (self.x > self.x_threshold_max) | (self.theta < self.theta_threshold_min) | (self.theta > self.theta_threshold_max)).int()
         self.info_dict["safe_cost"] =safe_cost
         return safe_cost
 

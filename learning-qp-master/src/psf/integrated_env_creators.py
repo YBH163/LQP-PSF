@@ -32,19 +32,23 @@ class Integrated_env:
         self.num_actions = self.env.num_actions
     
     def get_ud(self):
-        x, x_dot, theta, theta_dot, x_ref = self.env.obs()
+        # x, x_dot, theta, theta_dot, x_ref = self.env.obs()
+        theta = self.env.obs()[..., 2]
         if self.train_or_test == "train":
             # generate randomly (only work for action_dim = 1)
-            ud = self.env.u_min + (self.env.u_max - self.env.u_min) * torch.rand(self.env.bs, device=self.device)
+            ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
         elif self.train_or_test == "test":
             # bang-bang control
             # 当 theta 大于 0 度时，u 应该小于 0；当 theta 小于 0 度时，u 应该大于 0
-            if theta >= 0.2 :
-                ud = self.u_min
-            elif theta <= -0.2 :
-                ud = self.u_max
-            else:
-                ud = 0  
+            # if theta >= 0.2 :
+            #     ud = self.u_min
+            # elif theta <= -0.2 :
+            #     ud = self.u_max
+            # else:
+            #     ud = 0
+            
+            # 使用 torch.where 来向量化条件操作
+            ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_min), torch.where(theta <= -0.2, torch.full_like(theta, self.u_max), torch.zeros_like(theta)))
         self.ud = ud
         return ud
     
