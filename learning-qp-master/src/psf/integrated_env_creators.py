@@ -4,6 +4,7 @@ from src.envs.linear_system import LinearSystem
 from src.envs.cartpole import CartPole
 from src.envs.env_creators import env_creators, sys_param
 import gym
+from icecream import ic
 
 class Integrated_env:
     def __init__(self, env_name, **kwargs):
@@ -57,7 +58,7 @@ class Integrated_env:
         if self.train_or_test == "train":
             init_ud = self.get_ud()
         elif self.train_or_test == "test":
-            init_ud = 0     # cuz initial theta is small (0.1)
+            init_ud = torch.zeros(self.env.bs, device=self.device)     # cuz initial theta is small (0.1)
         combined_obs = torch.cat((init_obs, init_ud.unsqueeze(-1)), dim=-1)
         return combined_obs
     
@@ -78,18 +79,25 @@ class Integrated_env:
     def cost(self, *args, **kwargs):
         return self.env.cost(*args, **kwargs)
     
-    def reward(self):
-        original_reward = -self.env.safe_cost()
+    def reward(self,original_reward):
+        # original_reward = -self.env.safe_cost()
+        coef_safety = 1000.0
+        safe_cost = coef_safety * original_reward
         deviation = torch.norm(self.ud - self.env.u, p=2) ** 2
-        coef_deviation = 1.0
-        deviation_cost = - coef_deviation * deviation
-        combined_reward = original_reward + deviation_cost
+        coef_deviation = 1e-5
+        deviation_cost = -coef_deviation * deviation
+        combined_reward = safe_cost + deviation_cost  # 注意正负号！！
+        if not self.env.quiet:
+            avg_safe_cost = safe_cost.float().mean().item()
+            avg_deviation_cost = deviation_cost.mean().item()
+            ic(avg_safe_cost)
+            ic(avg_deviation_cost)
         return combined_reward
     
     def step(self, action):
         self.get_ud()   # update ud every step
         original_obs, original_reward, done, info = self.env.step(action)
-        return self.obs(), self.reward(), done, info
+        return self.obs(), self.reward(original_reward), done, info
     
     def render(self, *args, **kwargs):
         return self.env.render(*args, **kwargs)

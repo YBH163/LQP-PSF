@@ -362,7 +362,7 @@ class CartPole():
                 self.write_episode_stats(i)
 
         # Return observation, reward, done, info
-        return self.obs(), self.reward(), self.done(), self.info()
+        return self.obs(), -self.safe_cost(), self.done(), self.info()
 
     def render(self, **kwargs):
         """Renders the environment. Currently, it just prints out state variables and average cost."""
