@@ -32,9 +32,9 @@ class Integrated_env:
         self.num_states = self.env.num_states + self.env.num_actions    # different
         self.num_actions = self.env.num_actions
     
-    def get_ud(self):
+    def get_ud(self, obs):
         # x, x_dot, theta, theta_dot, x_ref = self.env.obs()
-        theta = self.env.obs()[..., 2]
+        theta = obs[..., 2]
         if self.train_or_test == "train":
             # generate randomly (only work for action_dim = 1)
             ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
@@ -56,9 +56,10 @@ class Integrated_env:
     def reset(self, *args, **kwargs):
         init_obs = self.env.reset(*args, **kwargs)
         if self.train_or_test == "train":
-            init_ud = self.get_ud()
+            init_ud = self.get_ud(init_obs)
         elif self.train_or_test == "test":
             init_ud = torch.zeros(self.env.bs, device=self.device)     # cuz initial theta is small (0.1)
+            self.ud = init_ud
         combined_obs = torch.cat((init_obs, init_ud.unsqueeze(-1)), dim=-1)
         return combined_obs
     
@@ -76,15 +77,16 @@ class Integrated_env:
         combined_obs = torch.cat((current_obs, self.ud.unsqueeze(-1)), dim=-1)
         return combined_obs
     
-    def cost(self, *args, **kwargs):
-        return self.env.cost(*args, **kwargs)
+    # def cost(self, *args, **kwargs):
+    #     return self.env.cost(*args, **kwargs)
     
-    def reward(self,original_reward):
+    def reward(self,original_reward, action):
         # original_reward = -self.env.safe_cost()
-        coef_safety = 1000.0
+        coef_safety = 10000.0
         safe_cost = coef_safety * original_reward
-        deviation = torch.norm(self.ud - self.env.u, p=2) ** 2
-        coef_deviation = 1e-5
+        # deviation = torch.norm(self.ud - action, p=2) ** 2
+        deviation = (self.ud - action.squeeze()) ** 2
+        coef_deviation = 1.0
         deviation_cost = -coef_deviation * deviation
         combined_reward = safe_cost + deviation_cost  # 注意正负号！！
         if not self.env.quiet:
@@ -94,10 +96,15 @@ class Integrated_env:
             ic(avg_deviation_cost)
         return combined_reward
     
-    def step(self, action):
-        self.get_ud()   # update ud every step
-        original_obs, original_reward, done, info = self.env.step(action)
-        return self.obs(), self.reward(original_reward), done, info
+    def step(self, action):    
+        # 用ud进行测试时
+        # original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
+        # reward = self.reward(original_reward, self.ud)
+        original_obs, original_reward, done, info = self.env.step(action)   
+        reward = self.reward(original_reward, action)
+        # get next ud
+        self.get_ud(original_obs)   # update ud every step
+        return self.obs(), reward, done, info
     
     def render(self, *args, **kwargs):
         return self.env.render(*args, **kwargs)
