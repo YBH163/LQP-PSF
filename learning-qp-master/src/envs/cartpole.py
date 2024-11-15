@@ -7,6 +7,7 @@ import random
 from datetime import datetime
 from icecream import ic
 from ..utils.torch_utils import conditional_fork_rng, bsolve, bqf, get_rng
+from scipy.linalg import solve_continuous_are
 
 
 class CartPole():
@@ -133,8 +134,50 @@ class CartPole():
         self.stats = pd.DataFrame(columns=['initial_state', 'x_ref', 'episode_length', 'cumulative_cost', 'constraint_violated'])
 
         self.info_dict = {}
+        
+        # for LQR
+        # Continuous time A, B matrices
+        g = 9.8
+        self.A_ct = np.array([
+            [0, 1, 0, 0],
+            [0, 0, -g * self.m_pole_nom / self.m_cart_nom, 0],
+            [0, 0, 0, 1],
+            [0, 0, (self.m_cart_nom + self.m_pole_nom) * g / (self.l_nom * self.m_cart_nom) , 0],
+        ])
+        self.B_ct = np.array([
+            [0],
+            [1 / self.m_cart_nom],
+            [0],
+            [-1 / (self.l_nom * self.m_cart_nom)],
+        ])
+
+        # Discretization
+        self.A = np.eye(4) + self.dt * self.A_ct
+        self.B = self.dt * self.B_ct
+        
+        self.P = solve_continuous_are(self.A, self.B, Q, R) 
+        self.K = (np.linalg.solve(R, self.B.T)) @ self.P 
 
         self.reset()
+
+    def get_action_LQR(self):        
+        # 当前状态向量
+        x_tensors = [self.x, self.x_dot, self.theta, self.theta_dot]
+        x = torch.stack(x_tensors, dim=0) 
+        # x = torch.cat([t.unsqueeze(-1) for t in [self.theta, self.theta_dot, self.alpha, self.alpha_dot]], dim=0)
+        
+        # 参考状态向量
+        batch_zeros = lambda shape: torch.zeros((self.bs,) + shape, dtype=torch.float32, device=self.device)
+        x_ref_tensors = [self.x_ref, batch_zeros(tuple()), batch_zeros(tuple()), batch_zeros(tuple())]
+        x_ref = torch.stack(x_ref_tensors, dim=0)
+
+        # 将K转为torch tensor类型
+        K_tensor = torch.from_numpy(self.K).to(self.device, dtype=torch.float32)
+        # LQR控制律
+        action = K_tensor @ ((x_ref-x))
+        # 得到的是1*bs的，还需要转置一下成为bs*1的才行
+        action_transposed = action.t()
+        return action_transposed
 
     def obs(self):
         """Returns the observation from the environment in the format (x, x_dot, theta, theta_dot, x_ref)."""

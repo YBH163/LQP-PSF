@@ -7,6 +7,7 @@ from ..modules.qp_solver import QPSolver
 from ..modules.warm_starter import WarmStarter
 from ..utils.torch_utils import make_psd, interpolate_state_dicts
 from ..utils.mpc_utils import mpc2qp, scenario_robust_mpc, tube_robust_mpc
+from ..utils.psf_baseline_utils import psf2qp
 from ..utils.osqp_utils import osqp_oracle
 from ..utils.np_batch_op import np_batch_op
 import os
@@ -245,7 +246,7 @@ class QPUnrolledNetwork(nn.Module):
 
     def run_mpc_baseline(self, x, use_osqp_oracle=False):
         robust_method = self.mpc_baseline.get("robust_method", None)
-        x0, xref = self.mpc_baseline["obs_to_state_and_ref"](x)
+        x0, xref = self.mpc_baseline["obs_to_state_and_ref"](x)     # what is x0?
         bs = x.shape[0]
 
         # Conversions between torch and np
@@ -256,14 +257,12 @@ class QPUnrolledNetwork(nn.Module):
         if robust_method is None:
             # Run vanilla MPC without robustness
             eps = 1e-3
-            n, m, P, q, H, b = mpc2qp(
+            n, m, P, q, H, b = psf2qp(
                 self.mpc_baseline["n_mpc"],
                 self.mpc_baseline["m_mpc"],
                 self.mpc_baseline["N"],
                 t(self.mpc_baseline["A"]),
                 t(self.mpc_baseline["B"]),
-                t(self.mpc_baseline["Q"]),
-                t(self.mpc_baseline["R"]),
                 self.mpc_baseline["x_min"] + eps,
                 self.mpc_baseline["x_max"] - eps,
                 self.mpc_baseline["u_min"],
