@@ -1,0 +1,169 @@
+import pandas as pd
+import torch
+import numpy as np
+from src.envs.env_creators import env_creators
+from icecream import ic
+import random
+import os
+
+# seed
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+
+# Controlling process noise and parametric uncertainty
+noise_level = 0.5
+parametric_uncertainty = False
+# parameter_randomization_seed = 42
+
+# Constants and options
+n_sys = 4
+m_sys = 1
+input_size = 5
+device = "cuda:0"
+bs = 100
+exp_name = f"test_lqr"
+
+# 创建环境实例
+env = env_creators["cartpole"](
+    noise_level=noise_level,
+    bs=bs,
+    max_steps=100,
+    keep_stats=True,
+    run_name=exp_name,
+    exp_name=exp_name,
+    randomize=parametric_uncertainty,
+    quiet = True,
+    Q = np.diag([10., 1e-4, 100., 1e-4]),
+    R = np.array([[1]]),
+    device = device
+)
+
+# 收集数据的函数
+def collect_data(env, num_episodes, save_interval, csv_file):    
+    data_all = {
+        'observations': [],
+        'actions': [],
+        'rewards': [],
+        'next_observations': [],
+        'terminals': []
+    }
+    
+    for i in range(num_episodes):
+        data = [{'observations': [], 'actions': [], 'rewards': [], 'next_observations': [], 'terminals': []} for _ in range(bs)]        
+        obs = env.reset()
+        done = torch.zeros(bs, dtype=torch.bool, device=device)
+        # is_done = False
+        # while not torch.any(done): # 只要有1个实例完成了，就退出循环
+        for _ in range(env.max_steps-1):
+            # K = env.get_K_LQR()
+            # lqr_action = K @ obs.unsqueeze(1)
+            v = (noise_level * torch.randn((bs, 1), device=device))
+            action = env.get_action_LQR() + v   # LQR方法生成
+            action = torch.clamp(action, -10, 10)
+            # action = -10 + (20 * torch.rand((bs, 1), device=device))  # 随机生成
+            env.reset_done_envs()
+            obs = env.obs()
+            next_obs, reward, done, _ = env.step(action)
+            for j in range(bs):
+                data[j]['observations'].append(obs[j].cpu().numpy())
+                data[j]['actions'].append(action[j].cpu().numpy())
+                data[j]['rewards'].append(reward[j].cpu().numpy())
+                data[j]['next_observations'].append(next_obs[j].cpu().numpy())
+                data[j]['terminals'].append(done[j].cpu().numpy())
+                # if done[j]:
+                    # next_obs[j] = env.reset()
+            # obs = next_obs
+        for k in range(bs):
+            for key in data_all.keys():
+                data_all[key].extend(data[k][key])
+                
+        # 检查是否达到保存间隔，如果是，则保存数据
+        if (i+1) % save_interval == 0 or i == num_episodes - 1:
+            # 将数据转换为 pandas DataFrame
+            df = pd.DataFrame(data_all)
+
+            mode = 'a'  # 始终使用追加模式
+            # 检查文件是否存在，如果不存在，我们需要写入表头
+            write_header = not os.path.isfile(csv_file)
+            df.to_csv(csv_file, index=False, mode=mode, header=write_header)  # 只在文件首次创建时添加表头
+
+            # 清空数组，准备下一次保存
+            data_all = {
+                'observations': [],
+                'actions': [],
+                'rewards': [],
+                'next_observations': [],
+                'terminals': []
+            }
+    return data_all
+
+
+def test_lqr(env, num_episodes):
+    # 初始化性能指标的列表
+    total_rewards = []
+    total_lengths = []
+
+    # 测试循环
+    for episode in range(num_episodes):
+        obs = env.reset()
+        episode_reward = torch.zeros(bs, dtype=torch.float32).to('cuda:0')
+        episode_length = torch.zeros(bs, dtype=torch.int32).to('cuda:0')
+        active_mask = torch.ones(bs, dtype=torch.bool).to('cuda:0')  # 初始化活跃掩码
+
+        while active_mask.any():  # 只要还有活跃的episode，就继续循环
+            # 选择并执行动作，只对活跃的episode
+            v = (noise_level * torch.randn((bs, 1), device=device))
+            action = env.get_action_LQR() + v   # LQR方法生成
+            action = torch.clamp(action, -10, 10)
+            
+            # 假设 self.eval_env.step 接受 PyTorch 张量作为输入，并且只对活跃的episode进行操作
+            next_obs, reward, terminal, _ = env.step(action)
+
+            # 更新活跃episode的奖励和长度
+            episode_reward[active_mask] += reward[active_mask]
+            episode_length[active_mask] += 1
+
+            # 更新活跃掩码，停止已经结束的episode
+            active_mask &= ~terminal
+
+            # 转移到下一个观察，只对活跃的episode
+            obs[active_mask] = next_obs[active_mask]
+
+        # 计算平均长度
+        average_episode_length = episode_length.float().mean().item()
+        average_episode_reward  = episode_reward .float().mean().item()
+
+        # 记录episode的平均奖励和平均长度（bs个取平均
+        total_rewards.append(average_episode_reward)
+        total_lengths.append(average_episode_length)
+        
+        # 打印每个episode的结果
+        print(f"Episode {episode}: Reward = {episode_reward}, Length = {episode_length}")
+
+    # 计算并返回平均奖励和平均长度（test_episodes个，取平均
+    avg_reward = np.mean(total_rewards)
+    avg_length = np.mean(total_lengths)
+    # 打印平均奖励和平均长度
+    print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
+    print(f"Average Episode Length over {num_episodes} episodes: {avg_length}")
+    
+    return {"average_reward": avg_reward, "average_episode_length": avg_length}
+
+if __name__ == "__main__":    
+    num_episodes = 100  # 假设我们想要100个episodes的数据
+    is_test = 1
+    save_interval = 10  # 每10个episodes保存一次数据
+    if is_test:
+        test_lqr(env,num_episodes)  #测试lqr效果
+    
+    else:      
+        # 保存为 CSV 文件
+        csv_file = 'qube_servo_data_positive.csv'  
+        dataset = collect_data(env, num_episodes,save_interval, csv_file)   # 收集数据
+
+        # 将数据转换为 pandas DataFrame
+        # df = pd.DataFrame(dataset)
+        # df.to_csv(csv_file, index=False)

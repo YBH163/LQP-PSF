@@ -48,8 +48,10 @@ class Integrated_env:
             # else:
             #     ud = 0
             
-            # 使用 torch.where 来向量化条件操作
+            # bang-bang control (使用 torch.where 来向量化条件操作
             ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_min), torch.where(theta <= -0.2, torch.full_like(theta, self.u_max), torch.zeros_like(theta)))
+            # LQR control
+            # ud = self.env.get_action_LQR().squeeze(-1)
         self.ud = ud
         return ud
     
@@ -100,6 +102,7 @@ class Integrated_env:
         # 用ud进行测试时
         # original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
         # reward = self.reward(original_reward, self.ud)
+        # 正常测试
         original_obs, original_reward, done, info = self.env.step(action)   
         reward = self.reward(original_reward, action)
         # get next ud

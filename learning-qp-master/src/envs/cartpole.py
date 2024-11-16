@@ -74,8 +74,8 @@ class CartPole():
         self.R = t(R)
 
         # Dynamics
-        batch_ones = lambda shape: torch.zeros((bs,) + shape, dtype=torch.float32, device=device)
-        single_ones = lambda shape: torch.zeros((1,) + shape, dtype=torch.float32, device=device)
+        batch_ones = lambda shape: torch.ones((bs,) + shape, dtype=torch.float32, device=device)
+        single_ones = lambda shape: torch.ones((1,) + shape, dtype=torch.float32, device=device)
         self.m_pole = self.m_pole_min * batch_ones(tuple())
         self.m_cart = self.m_cart_min * batch_ones(tuple())
         self.l = self.l_min * batch_ones(tuple())
@@ -140,20 +140,22 @@ class CartPole():
         g = 9.8
         self.A_ct = np.array([
             [0, 1, 0, 0],
-            [0, 0, -g * self.m_pole_nom / self.m_cart_nom, 0],
+            [0, 0, -g * self.m_pole_nom.cpu().numpy()[0] / self.m_cart_nom.cpu().numpy()[0], 0],
             [0, 0, 0, 1],
-            [0, 0, (self.m_cart_nom + self.m_pole_nom) * g / (self.l_nom * self.m_cart_nom) , 0],
+            [0, 0, (self.m_cart_nom.cpu().numpy()[0] + self.m_pole_nom.cpu().numpy()[0]) * g / (self.l_nom.cpu().numpy()[0] * self.m_cart_nom.cpu().numpy()[0]) , 0],
         ])
         self.B_ct = np.array([
             [0],
-            [1 / self.m_cart_nom],
+            [1 / self.m_cart_nom.cpu().numpy()[0]],
             [0],
-            [-1 / (self.l_nom * self.m_cart_nom)],
+            [-1 / (self.l_nom.cpu().numpy()[0] * self.m_cart_nom.cpu().numpy()[0])],
         ])
 
         # Discretization
-        self.A = np.eye(4) + self.dt * self.A_ct
-        self.B = self.dt * self.B_ct
+        # self.A = np.eye(4) + self.dt * self.A_ct
+        # self.B = self.dt * self.B_ct
+        self.A = self.A_ct
+        self.B = self.B_ct
         
         self.P = solve_continuous_are(self.A, self.B, Q, R) 
         self.K = (np.linalg.solve(R, self.B.T)) @ self.P 
@@ -176,7 +178,8 @@ class CartPole():
         # LQR控制律
         action = K_tensor @ ((x_ref-x))
         # 得到的是1*bs的，还需要转置一下成为bs*1的才行
-        action_transposed = action.t()
+        action_transposed = action.t()  # (bs,1)
+        # action_transposed = action_transposed.squeeze(-1)   #(bs,)
         return action_transposed
 
     def obs(self):
