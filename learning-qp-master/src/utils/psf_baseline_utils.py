@@ -69,9 +69,16 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     m = 2 * (n_sys + m_sys) * N   # number of constraints
     n = m_sys * N                 # number of decision variables
 
+    # 将（4,1）的numpy array变成（bs，4）的torch tensor
+    x_min = torch.from_numpy(x_min).view(-1).repeat(bs, 1).to(device)
+    x_max = torch.from_numpy(x_max).view(-1).repeat(bs, 1).to(device)
+    # 将形状为 (bs, 4) 的向量重复 N 次，变成形状为 (bs, 4N) 的向量
+    x_min_repeated = x_min.repeat(1, N)     # repeat(1, N) 表示在第一个维度（bs）上重复1次，在第二个维度（4）上重复N次
+    x_max_repeated = x_max.repeat(1, N)
+    
     b = torch.cat([
-        Ax0 - x_min,
-        x_max - Ax0,
+        Ax0 - x_min_repeated,
+        x_max_repeated - Ax0,
         -u_min * torch.ones((bs, n), device=device),
         u_max * torch.ones((bs, n), device=device),
     ], 1)
@@ -94,7 +101,7 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     
     # P = 2 * XU.t() @ Q_kron @ XU + 2 * kron(torch.eye(N, device=device), R)  # (n, n)
     
-    eps = 1e-6     # a very small number
+    eps = 1e-3     # a very small number
     # 创建一个对角线元素全为 eps 的对角阵
     P = torch.diag(torch.full((n,), eps))
     # 将第一行第一列的元素设置为 1

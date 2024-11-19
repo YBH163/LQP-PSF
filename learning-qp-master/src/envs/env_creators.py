@@ -59,6 +59,9 @@ sys_param = {
         "R": np.array([[1]]),
         "x_min": -2,
         "x_max": 2,
+        # (x, x_dot, theta, theta_dot)
+        "states_min": np.array([[-2], [-100], [-0.5], [-100]]),
+        "states_max": np.array([[2], [100], [0.5], [100]]),
         "u_min": -10,
         "u_max": 10,
         "dt": 0.1,

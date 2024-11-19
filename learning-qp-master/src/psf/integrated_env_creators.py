@@ -49,9 +49,13 @@ class Integrated_env:
             #     ud = 0
             
             # bang-bang control (使用 torch.where 来向量化条件操作
-            ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_min), torch.where(theta <= -0.2, torch.full_like(theta, self.u_max), torch.zeros_like(theta)))
+            ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             # LQR control
-            # ud = self.env.get_action_LQR().squeeze(-1)
+            # noise = 2
+            # v = (noise * torch.randn((self.bs, 1), device=self.device))
+            # ud = self.env.get_action_LQR() + v 
+            # ud = ud.squeeze(-1)
+
         self.ud = ud
         return ud
     
@@ -88,7 +92,7 @@ class Integrated_env:
         safe_cost = coef_safety * original_reward
         # deviation = torch.norm(self.ud - action, p=2) ** 2
         deviation = (self.ud - action.squeeze()) ** 2
-        coef_deviation = 1.0
+        coef_deviation = 0.1
         deviation_cost = -coef_deviation * deviation
         combined_reward = safe_cost + deviation_cost  # 注意正负号！！
         if not self.env.quiet:
