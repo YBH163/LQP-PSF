@@ -97,6 +97,10 @@ class CartPole():
         self.x_threshold_max = self.x_max
         self.theta_threshold_min = self.theta_min / 2.0
         self.theta_threshold_max = self.theta_max / 2.0
+        self.x_dot_max = 100
+        self.x_dot_min = -100
+        self.theta_dot_max = 100
+        self.theta_dot_min = -100
 
         # States, references, inputs
         batch_zeros = lambda shape: torch.zeros((bs,) + shape, dtype=torch.float32, device=device)
@@ -159,6 +163,29 @@ class CartPole():
         
         self.P = solve_continuous_are(self.A, self.B, Q, R) 
         self.K = (np.linalg.solve(R, self.B.T)) @ self.P 
+        
+        # for terminal set calculation
+        self.n_sys = 4
+        self.m_sys = 1
+        # 构造 Hx 和 h
+        self.Hx = np.block([
+            [np.eye(self.n_sys)],
+            [-np.eye(self.n_sys)],# 状态变量的上界和下界
+        ])
+        # hx = np.concatenate([self.x_max, self.x_dot_max, self.theta_max, self.theta_dot_max, -self.x_min, -self.x_dot_min, -self.theta_min, -self.theta_dot_min])
+        self.hx = np.concatenate([
+            np.array([self.x_max]), np.array([self.x_dot_max]), np.array([self.theta_max]), np.array([self.theta_dot_max]),
+            np.array([-self.x_min]), np.array([-self.x_dot_min]), np.array([-self.theta_min]), np.array([-self.theta_dot_min])
+        ])
+
+        # 构造 Hu 和 h
+        self.Hu = np.array([[1], [-1]])  # 控制输入的上界和下界
+        self.hu = np.array([u_max, -u_min])
+        # 构造 h，将状态和控制输入的上界合并
+        self.h = np.concatenate([self.hx, self.hu]).reshape(-1, 1)
+
+        # 计算闭环系统的状态转移矩阵 Ak
+        self.Ak = self.A - np.dot(self.B, self.K)
 
         self.reset()
 
