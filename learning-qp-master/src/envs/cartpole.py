@@ -162,7 +162,7 @@ class CartPole():
 
         self.reset()
 
-    def get_action_LQR(self):        
+    def get_action_LQR(self, noise_level = None):        
         # 当前状态向量
         x_tensors = [self.x, self.x_dot, self.theta, self.theta_dot]
         x = torch.stack(x_tensors, dim=0) 
@@ -176,9 +176,19 @@ class CartPole():
         # 将K转为torch tensor类型
         K_tensor = torch.from_numpy(self.K).to(self.device, dtype=torch.float32)
         # LQR控制律
-        action = K_tensor @ ((x_ref-x))
-        # 得到的是1*bs的，还需要转置一下成为bs*1的才行
-        action_transposed = action.t()  # (bs,1)
+        if noise_level is None:
+            action = K_tensor @ ((x_ref-x))
+            # 得到的是1*bs的，还需要转置一下成为bs*1的才行
+            action_transposed = action.t()  # (bs,1)
+        else:
+            # 生成一个与K_tensor形状相同，均值为0，标准差为noise_level的高斯噪声
+            noise = torch.randn_like(K_tensor) * noise_level
+            # 将噪声添加到K_tensor上
+            K_tensor_noisy = K_tensor + noise
+            # 使用带有噪声的K_tensor_noisy
+            action = K_tensor_noisy @ ((x_ref - x))
+            # 得到的是1*bs的，还需要转置一下成为bs*1的才行
+            action_transposed = action.t()  # (bs,1)
         # action_transposed = action_transposed.squeeze(-1)   #(bs,)
         return action_transposed
 

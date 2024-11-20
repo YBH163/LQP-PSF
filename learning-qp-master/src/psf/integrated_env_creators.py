@@ -49,12 +49,12 @@ class Integrated_env:
             #     ud = 0
             
             # bang-bang control (使用 torch.where 来向量化条件操作
-            ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
+            # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             # LQR control
-            # noise = 2
-            # v = (noise * torch.randn((self.bs, 1), device=self.device))
-            # ud = self.env.get_action_LQR() + v 
-            # ud = ud.squeeze(-1)
+            noise = 2
+            v = (noise * torch.randn((self.bs, 1), device=self.device))
+            ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
+            ud = ud.squeeze(-1)
 
         self.ud = ud
         return ud
@@ -100,12 +100,16 @@ class Integrated_env:
             avg_deviation_cost = deviation_cost.mean().item()
             ic(avg_safe_cost)
             ic(avg_deviation_cost)
-        return combined_reward
+        if self.train_or_test == "train":
+            return combined_reward
+        elif self.train_or_test == "test":
+            return original_reward      # original safe cost
     
     def step(self, action):    
         # 用ud进行测试时
         # original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
         # reward = self.reward(original_reward, self.ud)
+        
         # 正常测试
         original_obs, original_reward, done, info = self.env.step(action)   
         reward = self.reward(original_reward, action)
