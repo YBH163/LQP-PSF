@@ -186,7 +186,16 @@ class CartPole():
 
         # 计算闭环系统的状态转移矩阵 Ak
         self.Ak = self.A - np.dot(self.B, self.K)
-
+        
+        # 测试，当只考虑上界约束
+        self.Hx = np.eye(self.n_sys)
+        self.hx = np.concatenate([
+            np.array([self.x_max]), np.array([self.x_dot_max]), np.array([self.theta_max]), np.array([self.theta_dot_max]),
+        ])
+        self.Hu = np.array([[1]])
+        self.hu = np.array([u_max])
+        self.h = np.concatenate([self.hx, self.hu]).reshape(-1, 1)
+        
         self.reset()
 
     def get_action_LQR(self, noise_level = None):        
