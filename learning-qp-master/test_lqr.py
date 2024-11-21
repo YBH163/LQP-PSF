@@ -27,7 +27,7 @@ bs = 100
 exp_name = f"test_lqr"
 
 # 创建环境实例
-env = env_creators["cartpole"](
+env = env_creators["double_integrator"](
     noise_level=noise_level,
     bs=bs,
     max_steps=100,
@@ -36,8 +36,8 @@ env = env_creators["cartpole"](
     exp_name=exp_name,
     randomize=parametric_uncertainty,
     quiet = True,
-    Q = np.diag([10., 1e-4, 100., 1e-4]),
-    R = np.array([[1]]),
+    # Q = np.diag([10., 1e-4, 100., 1e-4]),
+    # R = np.array([[1]]),
     device = device
 )
 

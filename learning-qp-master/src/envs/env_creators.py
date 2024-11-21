@@ -7,15 +7,23 @@ sys_param = {
     "double_integrator": {
         "n": 2, # state_num
         "m": 1, # action_num
+        # "A": np.array([
+        #     [1.0, 1.0],
+        #     [0.0, 1.0],
+        # ]),
         "A": np.array([
-            [1.0, 1.0],
             [0.0, 1.0],
+            [0.0, 0.0],
         ]),
         "B": np.array([
             [0.0],
             [1.0],
         ]),
-        "Q": np.eye(2),
+        # "Q": np.eye(2),
+        "Q": np.array([
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ]),
         "R": np.array([[100.0]]),
         "x_min": -5.,
         "x_max": 5.,

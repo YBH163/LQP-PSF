@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from ..utils.torch_utils import bmv, bqf, bsolve, conditional_fork_rng, get_rng
 from icecream import ic
-
+from scipy.linalg import solve_continuous_are
 
 class LinearSystem():
     def __init__(
@@ -97,7 +97,7 @@ class LinearSystem():
         self.u_eq_min = t(u_eq_min) if u_eq_min is not None else self.u_min
         self.u_eq_max = t(u_eq_max) if u_eq_max is not None else self.u_max
         self.bs = bs
-        self.barrier_thresh = barrier_thresh
+        self.barrier_thresh = barrier_thresh    # 安全边界或屏障阈值
         self.max_steps = max_steps
         self.stabilization_only = stabilization_only
         self.num_states = self.n if stabilization_only else 2 * self.n
@@ -130,6 +130,29 @@ class LinearSystem():
 
         self.initial_generator = initial_generator
         self.ref_generator = ref_generator
+        
+        # for LQR control        
+        self.P = solve_continuous_are(A, B, Q, R) 
+        self.K = (np.linalg.solve(R, B.T)) @ self.P 
+    
+    def get_action_LQR(self, noise_level = None):        
+        # 将K转为torch tensor类型
+        K_tensor = torch.from_numpy(self.K).to(self.device, dtype=torch.float32)
+        # LQR控制律
+        if noise_level is None:
+            action = K_tensor @ ((self.x_ref-self.x).T)
+            # 得到的是1*bs的，还需要转置一下成为bs*1的才行
+            action_transposed = action.t()  # (bs,1)
+        else:
+            # 生成一个与K_tensor形状相同，均值为0，标准差为noise_level的高斯噪声
+            noise = torch.randn_like(K_tensor) * noise_level
+            # 将噪声添加到K_tensor上
+            K_tensor_noisy = K_tensor + noise
+            # 使用带有噪声的K_tensor_noisy
+            action = K_tensor_noisy @ ((self.x_ref - self.x).T)
+            # 得到的是1*bs的，还需要转置一下成为bs*1的才行
+            action_transposed = action.t()  # (bs,1)
+        return action_transposed
 
     def obs(self):
         """
@@ -175,6 +198,12 @@ class LinearSystem():
             avg_rew_main, avg_rew_state_bar, avg_rew_done, avg_rew_steady, avg_rew_total = coef_main * rew_main.mean().item(), coef_bar * rew_state_bar.mean().item(), coef_done * rew_done.mean().item(), rew_steady.mean().item(), rew_total.mean().item()
             ic(avg_rew_main, avg_rew_done, avg_rew_steady, avg_rew_total)
         return rew_total
+
+    def safe_cost(self):
+        # safe_cost = int(self.x < self.x_threshold_min or self.x > self.x_threshold_max or self.theta < self.theta_threshold_min or self.theta > self.theta_threshold_max)
+        safe_cost = ((self.x < self.x_min) | (self.x > self.x_max) ).int()
+        self.info_dict["safe_cost"] =safe_cost
+        return safe_cost
 
     def done(self):
         """
