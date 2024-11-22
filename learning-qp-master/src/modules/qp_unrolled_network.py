@@ -257,12 +257,22 @@ class QPUnrolledNetwork(nn.Module):
         if robust_method is None:
             # Run vanilla MPC without robustness
             eps = 1e-3
+            # A = self.mpc_baseline["A"]
+            # # 将 NumPy 数组转换为 PyTorch 张量
+            # A_tensor = torch.from_numpy(A).float()
+            # A_tensor = A_tensor.to(x.device)
+            # B = self.mpc_baseline["B"]
+            # # 将 NumPy 数组转换为 PyTorch 张量
+            # B_tensor = torch.from_numpy(B).float()
+            # B_tensor = B_tensor.to(x.device)
             n, m, P, q, H, b = psf2qp(
                 self.mpc_baseline["n_mpc"],
                 self.mpc_baseline["m_mpc"],
                 self.mpc_baseline["N"],
                 t(self.mpc_baseline["A"]),
                 t(self.mpc_baseline["B"]),
+                # A_tensor,
+                # B_tensor,
                 self.mpc_baseline["states_min"] + eps,
                 self.mpc_baseline["states_max"] - eps,
                 self.mpc_baseline["u_min"],

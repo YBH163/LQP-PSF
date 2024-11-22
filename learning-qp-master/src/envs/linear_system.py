@@ -9,6 +9,7 @@ from datetime import datetime
 from ..utils.torch_utils import bmv, bqf, bsolve, conditional_fork_rng, get_rng
 from icecream import ic
 from scipy.linalg import solve_continuous_are
+from scipy.signal import cont2discrete
 
 class LinearSystem():
     def __init__(
@@ -29,7 +30,7 @@ class LinearSystem():
         randomizer=None,
         **kwargs
     ):
-        """
+        '''
         Initializes the LinearSystem environment with given parameters.
 
         Parameters:
@@ -58,7 +59,7 @@ class LinearSystem():
             initial_generator (function, optional): Function that generates initial states.
             ref_generator (function, optional): Function that generates reference states.
             randomizer (function, optional): Function that randomizes the system dynamics (returns \Delta A, \Delta B).
-        """
+        '''
         # Random seed and random number generators for different components
         if random_seed is not None:
             torch.manual_seed(random_seed)
@@ -83,6 +84,23 @@ class LinearSystem():
         self.R = t(R)
         self.A0 = self.A
         self.B0 = self.B
+        
+        self.dt = 0.1
+        # 定义连续时间系统的参数
+        A_continuous = A
+        B_continuous = B
+        C_continuous = np.array([[1, 0]])  # 虽然不需要，但函数需要这个参数
+        D_continuous = np.array([[0]])  # 虽然不需要，但函数需要这个参数
+        # 使用 cont2discrete 函数将连续时间系统转换为离散时间系统
+        # 只提取 A_discrete 和 B_discrete
+        A_discrete, B_discrete, _, _, _ = cont2discrete(
+            (A_continuous, B_continuous, C_continuous, D_continuous), self.dt
+        )
+        self.A = t(A_discrete)
+        self.B = t(B_discrete)
+        self.A0 = self.A
+        self.B0 = self.B
+        
         self.randomizer = randomizer
         self.reward_shaping_parameters = reward_shaping_parameters
         if randomizer is not None:
@@ -119,7 +137,7 @@ class LinearSystem():
         self.already_on_stats = torch.zeros((bs,), dtype=torch.uint8, device=device)   # Each worker can only contribute once to the statistics, to avoid bias towards shorter episodes
         self.stats = pd.DataFrame(columns=['i', 'x0', 'x_ref', 'A', 'B', 'w0', 'episode_length', 'cumulative_cost', 'constraint_violated'])
         self.quiet = quiet
-
+                
         if skip_to_steady_state:
             self.max_steps = 1
             self.skip_to_steady_state = True
@@ -200,9 +218,11 @@ class LinearSystem():
         return rew_total
 
     def safe_cost(self):
-        # safe_cost = int(self.x < self.x_threshold_min or self.x > self.x_threshold_max or self.theta < self.theta_threshold_min or self.theta > self.theta_threshold_max)
-        safe_cost = ((self.x < self.x_min) | (self.x > self.x_max) ).int()
-        self.info_dict["safe_cost"] =safe_cost
+        # 检查每个状态变量是否越界，返回一个(bs, 2)形状的布尔张量
+        boundary_check = ((self.x < self.x_min) | (self.x > self.x_max))
+        # 将布尔张量转换为整数张量，任何状态变量越界则为1，否则为0
+        safe_cost = boundary_check.any(dim=-1).int()
+        self.info_dict["safe_cost"] = safe_cost
         return safe_cost
 
     def done(self):
@@ -240,7 +260,10 @@ class LinearSystem():
             else:
                 # Fall back to default reference generation
                 u_ref = self.u_eq_min + (self.u_eq_max - self.u_eq_min) * torch.rand((size, self.m), generator=self.rng_initial, device=self.device)
-                x_ref = bsolve(torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0, bmv(self.B0, u_ref))
+                epsilon = 1e-6
+                A_reg = torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0 + epsilon * torch.eye(self.n, device=self.device).unsqueeze(0)
+                x_ref = bsolve(A_reg, bmv(self.B0, u_ref))
+                # x_ref = bsolve(torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0, bmv(self.B0, u_ref))
                 x_ref += self.barrier_thresh * torch.randn((size, self.n), generator=self.rng_initial, device=self.device)
                 x_ref = x_ref.clamp(self.x_min + self.barrier_thresh, self.x_max - self.barrier_thresh)
         else:
@@ -355,7 +378,7 @@ class LinearSystem():
         self.reset_done_envs()
         u = u.clamp(self.u_min, self.u_max)
         self.u = u
-        self.cum_cost += self.cost(self.x - self.x_ref, u)
+        # self.cum_cost += self.cost(self.x - self.x_ref, u)
         w = bmv(self.sqrt_W, torch.randn((self.bs, self.n), generator=self.rng_process, device=self.device))
         self.w0[self.step_count == 0, :] = w[self.step_count == 0, :]
         if not self.skip_to_steady_state:
@@ -369,7 +392,7 @@ class LinearSystem():
             done_indices = torch.nonzero(self.is_done.to(dtype=torch.bool) & torch.logical_not(self.already_on_stats), as_tuple=False)
             for i in done_indices:
                 self.write_episode_stats(i)
-        return self.obs(), self.reward(), self.done(), self.info()
+        return self.obs(), self.safe_cost(), self.done(), self.info()
 
     def render(self, **kwargs):
         """

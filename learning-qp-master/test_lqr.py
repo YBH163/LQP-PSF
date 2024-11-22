@@ -5,6 +5,7 @@ from src.envs.env_creators import env_creators
 from icecream import ic
 import random
 import os
+import matplotlib.pyplot as plt
 
 # seed
 seed = 42
@@ -14,7 +15,7 @@ torch.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 
 # Controlling process noise and parametric uncertainty
-noise_level = 0.5
+noise_level = 0
 parametric_uncertainty = False
 # parameter_randomization_seed = 42
 
@@ -23,8 +24,12 @@ n_sys = 4
 m_sys = 1
 input_size = 5
 device = "cuda:0"
-bs = 100
+bs = 1
 exp_name = f"test_lqr"
+
+# Initial position and reference position
+state0 = [0,0]
+x_ref = [1,0]
 
 # 创建环境实例
 env = env_creators["double_integrator"](
@@ -100,23 +105,39 @@ def collect_data(env, num_episodes, save_interval, csv_file):
             }
     return data_all
 
+def make_obs(state, x_ref):
+    x = state[0]
+    dx = state[1]
+    raw_obs = torch.tensor(np.array([x, dx, x_ref[0], x_ref[1]]), device=device, dtype=torch.float)
+    return raw_obs.unsqueeze(0)
 
 def test_lqr(env, num_episodes):
     # 初始化性能指标的列表
     total_rewards = []
     total_lengths = []
 
+    states = []  # 用于存储状态
+    controls = []  # 用于存储控制输入
+
     # 测试循环
     for episode in range(num_episodes):
+        # 自定义初始状态
+        # t = lambda arr: torch.tensor(arr, device=device, dtype=torch.float).unsqueeze(0)
+        # env.reset(t(state0[0]), t(x_ref))
+        # obs = make_obs(state0, x_ref)
         obs = env.reset()
         episode_reward = torch.zeros(bs, dtype=torch.float32).to('cuda:0')
         episode_length = torch.zeros(bs, dtype=torch.int32).to('cuda:0')
         active_mask = torch.ones(bs, dtype=torch.bool).to('cuda:0')  # 初始化活跃掩码
 
+        state_history = []  # 存储每个时间步的状态
+        control_history = []  # 存储每个时间步的控制输入
+
         while active_mask.any():  # 只要还有活跃的episode，就继续循环
             # 选择并执行动作，只对活跃的episode
             v = (noise_level * torch.randn((bs, 1), device=device))
             action = env.get_action_LQR() + v   # LQR方法生成
+            # action = (10 * torch.randn((bs, 1), device=device))
             action = torch.clamp(action, -10, 10)
             
             # 假设 self.eval_env.step 接受 PyTorch 张量作为输入，并且只对活跃的episode进行操作
@@ -128,7 +149,11 @@ def test_lqr(env, num_episodes):
 
             # 更新活跃掩码，停止已经结束的episode
             active_mask &= ~terminal
-
+            
+            # 记录状态和控制输入
+            state_history.append(obs[0].cpu().numpy())
+            control_history.append(action[0].cpu().numpy())
+            
             # 转移到下一个观察，只对活跃的episode
             obs[active_mask] = next_obs[active_mask]
 
@@ -140,8 +165,13 @@ def test_lqr(env, num_episodes):
         total_rewards.append(average_episode_reward)
         total_lengths.append(average_episode_length)
         
+        # 存储状态和控制历史
+        states.append(state_history)
+        controls.append(control_history)
+        
         # 打印每个episode的结果
         print(f"Episode {episode}: Reward = {episode_reward}, Length = {episode_length}")
+        
 
     # 计算并返回平均奖励和平均长度（test_episodes个，取平均
     avg_reward = np.mean(total_rewards)
@@ -150,15 +180,42 @@ def test_lqr(env, num_episodes):
     print(f"Average Reward over {num_episodes} episodes: {avg_reward}")
     print(f"Average Episode Length over {num_episodes} episodes: {avg_length}")
     
-    return {"average_reward": avg_reward, "average_episode_length": avg_length}
+    # return {"average_reward": avg_reward, "average_episode_length": avg_length}
+    return {"average_reward": avg_reward, "average_episode_length": avg_length, "states": states, "controls": controls}
+
+def plot_states_controls(states, controls):
+    plt.figure(figsize=(12, 6))
+    plt.subplot(2, 1, 1)
+    plt.plot(states[0], label='States')
+    plt.xlabel('Time Step')
+    plt.ylabel('State Value')
+    plt.title('State Over Time')
+    plt.legend()
+
+    plt.subplot(2, 1, 2)
+    plt.plot(controls[0], label='Controls')
+    plt.xlabel('Time Step')
+    plt.ylabel('Control Value')
+    plt.title('Control Over Time')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":    
     num_episodes = 100  # 假设我们想要100个episodes的数据
     is_test = 1
+    is_visualize = 0
     save_interval = 10  # 每10个episodes保存一次数据
     if is_test:
-        test_lqr(env,num_episodes)  #测试lqr效果
-    
+        if is_visualize:
+            num_episodes = 1
+            results = test_lqr(env, num_episodes)  # 测试lqr效果
+            plot_states_controls(results["states"], results["controls"])  # 绘制状态和控制量
+            plt.savefig("trajectory.png")  # 保存图表
+            plt.close()  # 关闭图表，避免显示在屏幕上
+        else:
+            test_lqr(env, num_episodes)  # 测试lqr效果
     else:      
         # 保存为 CSV 文件
         csv_file = 'qube_servo_data_positive.csv'  

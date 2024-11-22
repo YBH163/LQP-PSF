@@ -64,5 +64,25 @@ def get_mpc_baseline_parameters(env_name, N, noise_std=0.):
             ref = torch.stack([x_ref, zeros, zeros, zeros], dim=1)
             return state, ref
         mpc_parameters["obs_to_state_and_ref"] = obs_to_state_and_ref
+    
+    if env_name == "double_integrator":
+        A = np.array([
+            [0.0, 1.0],
+            [0.0, 0.0],
+        ])
+        B = np.array([
+            [0.0],
+            [1.0],
+        ])
+        mpc_parameters["A"] = A
+        mpc_parameters["B"] = B
+
+        # Compute state and ref from obs: obs is in format (x, x_dot, theta, theta_dot, x_ref, ud)
+        def obs_to_state_and_ref(obs):
+            x1, x2, x1_ref, x2_ref,  ud = obs[:, 0], obs[:, 1], obs[:, 2], obs[:, 3], obs[:, 4]
+            state = torch.stack([x1, x2, ud], dim=1)
+            ref = torch.stack([x1_ref, x2_ref], dim=1)
+            return state, ref
+        mpc_parameters["obs_to_state_and_ref"] = obs_to_state_and_ref
 
     return mpc_parameters
