@@ -25,10 +25,10 @@ def backward_reachable_set_linear(A_inv, B, X_set, x_min, x_max, u_min, u_max):
         x = np.array(x)  # 将元组转换为 numpy 数组
         for u in np.linspace(u_min, u_max, 5):
             Bu = np.dot(B, u)
-            # prev_x = np.dot(A_inv, x.reshape(-1, 1) - Bu)
-            prev_x = np.dot(A_inv, x - Bu)
+            prev_x = np.dot(A_inv, x.reshape(-1, 1) - Bu)
+            # prev_x = np.dot(A_inv, x - Bu)
             if np.all(x_min <= prev_x) and np.all(prev_x <= x_max):
-                new_set.add(tuple(prev_x))
+                new_set.add(tuple(prev_x.flatten()))
     return new_set
 
 
@@ -164,7 +164,58 @@ def compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10):
         return MCI_hull.points[MCI_hull.vertices, :]
     else:
         return np.array([])
-    
+
+# 假设MCI集合是二维的，并且顶点是循环连接的    
+def construct_polyhedron_from_mci(mci_vertices):
+    F = []  # 存储不等式的系数
+    g = []  # 存储不等式的常数项
+
+    for i in range(len(mci_vertices)):
+        # 找到相邻的顶点
+        current_vertex = mci_vertices[i]
+        next_vertex = mci_vertices[(i + 1) % len(mci_vertices)]
+
+        # 计算从当前顶点到下一个顶点的向量
+        edge_vector = next_vertex - current_vertex
+
+        # 计算法向量，确保它指向多边形内部
+        normal_vector = np.array([edge_vector[1], -edge_vector[0]])
+
+        # 计算偏移量
+        bias = -np.dot(normal_vector, current_vertex)
+
+        # 构建不等式
+        F.append(normal_vector)
+        g.append(bias)
+
+    return np.array(F), np.array(g)
+
+def plot_halfspaces(F, g, vertices):
+    plt.figure(figsize=(8, 8))
+
+    # 绘制多边形的边界
+    for simplex in ConvexHull(vertices).simplices:
+        plt.plot(vertices[simplex, 0], vertices[simplex, 1], 'k-')
+
+    # 绘制每个半空间的线段
+    for i in range(len(F)):
+        # 找到当前半空间的两个顶点
+        vertex1 = vertices[np.argmin(np.dot(F[i], vertices.T) - g[i]), :]
+        vertex2 = vertices[np.argmin(np.dot(F[i], vertices.T) + g[i]), :]
+
+        # 绘制线段
+        plt.plot([vertex1[0], vertex2[0]], [vertex1[1], vertex2[1]], 'k--')
+
+    plt.fill(*zip(*vertices), 'gray', alpha=0.5)
+    plt.xlim(min(vertices[:, 0])-1, max(vertices[:, 0])+1)
+    plt.ylim(min(vertices[:, 1])-1, max(vertices[:, 1])+1)
+    plt.grid(True)
+    plt.title("Visualizing Polyhedron from Halfspaces")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.show()
+
+
 def main():
     # 定义双积分系统的动态矩阵 A 和输入矩阵 B
     A = np.array([[1, 0.1], [0., 1.]])
@@ -178,23 +229,28 @@ def main():
     # 计算 MCI 集合
     mci_vertices = compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10)
     
+    if mci_vertices.size > 0:
+        F, g = construct_polyhedron_from_mci(mci_vertices)
+        plot_halfspaces(F, g, mci_vertices)
+        plt.savefig('Polyhedron.png')
+        plt.close()
     # 可视化 MCI 集合
-    plt.figure(figsize=(8, 8))
-    hull = ConvexHull(mci_vertices)
-    plt.plot(hull.points[:, 0], hull.points[:, 1], 'o')
-    for simplex in hull.simplices:
-        plt.plot(hull.points[simplex, 0], hull.points[simplex, 1], 'k-')
-    plt.title("Maximal Control Invariant (MCI) Set for Double Integrator System")
-    plt.xlabel("State x")
-    plt.ylabel("State x_dot")
-    # plt.xlim([x_min[0], x_max[0]])
-    # plt.ylim([x_min[1], x_max[1]])
-    plt.xlim([-1, 1])
-    plt.ylim([-1, 1])
-    plt.grid(True)
-    plt.show()
-    plt.savefig('MCI.png')
-    plt.close()
+    # plt.figure(figsize=(8, 8))
+    # hull = ConvexHull(mci_vertices)
+    # plt.plot(hull.points[:, 0], hull.points[:, 1], 'o')
+    # for simplex in hull.simplices:
+    #     plt.plot(hull.points[simplex, 0], hull.points[simplex, 1], 'k-')
+    # plt.title("Maximal Control Invariant (MCI) Set for Double Integrator System")
+    # plt.xlabel("State x")
+    # plt.ylabel("State x_dot")
+    # # plt.xlim([x_min[0], x_max[0]])
+    # # plt.ylim([x_min[1], x_max[1]])
+    # plt.xlim([-1, 1])
+    # plt.ylim([-1, 1])
+    # plt.grid(True)
+    # plt.show()
+    # plt.savefig('MCI.png')
+    # plt.close()
 
 if __name__ == "__main__":
     main()
