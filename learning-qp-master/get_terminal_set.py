@@ -90,77 +90,38 @@ class Terminal_set:
     
     def visualize_terminal_set(self, vertices):
         # 提取 theta 和 theta_dot 用于可视化
-        theta = vertices[:, 2]
-        theta_dot = vertices[:, 3]
+        x = vertices[:, 0]
+        x_dot = vertices[:, 1]
         # 使用 column_stack 将它们组合为一个 (n, 2) 的数组
-        combined = np.column_stack((theta, theta_dot))
-        
-        # 创建一个多边形对象
+        combined = np.column_stack((x, x_dot))
+        '''
+        # 绘制多边形
         poly = Polygon(combined, closed=True , fill=True, edgecolor='red', facecolor='blue', linewidth=2, alpha=0.5)
-
         # 创建图形和轴
         fig, ax = plt.subplots()
-
         # 将多边形添加到轴上
         ax.add_patch(poly)
-
         # 设置坐标轴范围以包含所有顶点
-        ax.set_xlim(-0.004, 0.014)
-        ax.set_ylim(-0.02, 0.008)
-
+        ax.set_xlim(-5, 5)
+        ax.set_ylim(-5, 5)
         # 设置坐标轴标签和标题
-        ax.set_xlabel('theta')
-        ax.set_ylabel('theta_dot')
-        ax.set_title('Terminal Set in theta-theta_dot Plane')
-
+        ax.set_xlabel('x')
+        ax.set_ylabel('x_dot')
+        ax.set_title('Terminal Set in x-x_dot Plane')
         # 显示网格
         ax.grid(True)
-
         # 显示图形
         plt.show()
-
-        # 创建一个 patch 集合
-        # patches = PatchCollection([poly], match_original=True)
-
-        # 假设 patches 是一个 PatchCollection 对象
-        # 假设您想要添加第一个 Patch 到轴上
-        # first_patch = patches[0]  # 获取 PatchCollection 中的第一个 Patch 对象
-
-        # 创建一个散点图
-        # plt.scatter(theta, theta_dot, c='b', marker='o')
-        
-        # 假设 patches 是一个 PatchCollection 对象
-        # for patch in patches:  # 遍历 PatchCollection 中的每个 Patch 对象
-        #     plt.gca().add_patch(patch, facecolor='none', edgecolor='r', alpha=0.5)  # 将每个 Patch 对象添加到轴上
-
-        
-
-        # 添加多边形到散点图
-        # plt.gca().add_patch(patches)
-        # 添加 Patch 到轴上
-        # plt.gca().add_patch(first_patch)
-
-        # 1. 绘制多边形的边界
-        # plt.gca().add_patch(patches, facecolor='none', edgecolor='r')
-
-        # 2. 填充多边形的内部
-        # plt.gca().add_patch(patches, facecolor='r', edgecolor='r', alpha=0.5)
-
-        # plt.gca().set_xlabel('theta')
-        # plt.gca().set_ylabel('theta_dot')
-        # plt.gca().set_title('Terminal Set in theta-theta_dot Plane with Polygon')
-        # plt.gca().grid(True)
-        # plt.gca().axis('equal')  # 保持纵横比
-        # plt.gca().show()
-        
-        
+        '''
         # 绘制散点图
-        # plt.scatter(theta, theta_dot, c='b', marker='o')
-        # plt.xlabel('theta')
-        # plt.ylabel('theta_dot')
-        # plt.title('Terminal Set in theta-theta_dot Plane')
-        # plt.grid(True)
-        # plt.show()
+        plt.scatter(x, x_dot, c='b', marker='o')
+        plt.xlabel('x')
+        plt.ylabel('x_dot')
+        plt.xlim(-5, 5)
+        plt.ylim(-5, 5)
+        plt.title('Terminal Set in x-x_dot Plane')
+        plt.grid(True)
+        plt.show()
         
     def test_input_inbound(self,u_limit):
         A_inf,b_inf=self.Xf_nr
@@ -214,20 +175,20 @@ if __name__ == "__main__":
     torch.cuda.manual_seed_all(seed)
 
     # Controlling process noise and parametric uncertainty
-    noise_level = 0.5
+    noise_level = 0
     parametric_uncertainty = False
     # parameter_randomization_seed = 42
 
     # Constants and options
-    n_sys = 4
+    n_sys = 2       
     m_sys = 1
-    input_size = 5
+    # input_size = 5
     device = "cuda:0"
     bs = 100
     exp_name = f"test_lqr"
 
     # 创建环境实例
-    env = env_creators["cartpole"](
+    env = env_creators["double_integrator"](
         noise_level=noise_level,
         bs=bs,
         max_steps=100,
@@ -235,9 +196,9 @@ if __name__ == "__main__":
         run_name=exp_name,
         exp_name=exp_name,
         randomize=parametric_uncertainty,
-        quiet = True,
-        Q = np.diag([10., 1e-4, 100., 1e-4]),
-        R = np.array([[1]]),
+        # quiet = True,
+        # Q = np.diag([10., 1e-4, 100., 1e-4]),
+        # R = np.array([[1]]),
         device = device
     )
     
@@ -245,10 +206,10 @@ if __name__ == "__main__":
     terminal_set = Terminal_set(env.Hx, env.Hu, env.K, env.Ak, env.h)
     
     # 可视化终端集
-    # vertices = terminal_set.get_vertices()
-    # terminal_set.visualize_terminal_set(vertices)
+    vertices = terminal_set.get_vertices()
+    terminal_set.visualize_terminal_set(vertices)
     
-    terminal_set.visualize_terminal_set_directly()
+    # terminal_set.visualize_terminal_set_directly()
     plt.savefig('terminal_set.png')
     plt.close()
     

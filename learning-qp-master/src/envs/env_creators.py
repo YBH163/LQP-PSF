@@ -21,7 +21,7 @@ sys_param = {
         ]),
         # "Q": np.eye(2),
         "Q": np.array([
-            [10.0, 0.0],
+            [1.0, 0.0],
             [0.0, 10.0],
         ]),
         "R": np.array([[100.0]]),
@@ -31,6 +31,7 @@ sys_param = {
         "u_max": 0.5,
         "states_min": np.array([[-5], [-5]]),
         "states_max": np.array([[5], [5]]),
+        "dt": 0.1,
     },
     "tank": {
         "n": 4,
@@ -134,7 +135,7 @@ env_creators = {
         x_max=sys_param["double_integrator"]["x_max"] * np.ones(2),
         u_min=sys_param["double_integrator"]["u_min"] * np.ones(1),
         u_max=sys_param["double_integrator"]["u_max"] * np.ones(1),
-        barrier_thresh=0.1,
+        barrier_thresh=1,
         randomize_std=(0.001 if kwargs["randomize"] else 0.),
         stabilization_only=False,
         **kwargs

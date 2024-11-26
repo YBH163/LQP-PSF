@@ -28,14 +28,14 @@ bs = 1
 exp_name = f"test_lqr"
 
 # Initial position and reference position
-state0 = [0,0]
-x_ref = [1,0]
+state0 = [1,-1]
+x_ref = [-3,0]
 
 # 创建环境实例
 env = env_creators["double_integrator"](
     noise_level=noise_level,
     bs=bs,
-    max_steps=100,
+    max_steps=300,
     keep_stats=True,
     run_name=exp_name,
     exp_name=exp_name,
@@ -135,10 +135,10 @@ def test_lqr(env, num_episodes):
 
         while active_mask.any():  # 只要还有活跃的episode，就继续循环
             # 选择并执行动作，只对活跃的episode
-            v = (noise_level * torch.randn((bs, 1), device=device))
-            action = env.get_action_LQR() + v   # LQR方法生成
+            v = (0 * torch.randn((bs, 1), device=device))
+            action = env.get_action_LQR(noise_level = 0) + v   # LQR方法生成
             # action = (10 * torch.randn((bs, 1), device=device))
-            action = torch.clamp(action, -10, 10)
+            action = torch.clamp(action, -0.5, 0.5)
             
             # 假设 self.eval_env.step 接受 PyTorch 张量作为输入，并且只对活跃的episode进行操作
             next_obs, reward, terminal, _ = env.step(action)
@@ -205,7 +205,7 @@ def plot_states_controls(states, controls):
 if __name__ == "__main__":    
     num_episodes = 100  # 假设我们想要100个episodes的数据
     is_test = 1
-    is_visualize = 0
+    is_visualize = 1
     save_interval = 10  # 每10个episodes保存一次数据
     if is_test:
         if is_visualize:

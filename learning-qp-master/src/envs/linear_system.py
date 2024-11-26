@@ -9,7 +9,10 @@ from datetime import datetime
 from ..utils.torch_utils import bmv, bqf, bsolve, conditional_fork_rng, get_rng
 from icecream import ic
 from scipy.linalg import solve_continuous_are
+from scipy.linalg import solve_discrete_are
 from scipy.signal import cont2discrete
+from ..utils.sets import compute_MCI
+from scipy.spatial import ConvexHull , Delaunay
 
 class LinearSystem():
     def __init__(
@@ -87,17 +90,17 @@ class LinearSystem():
         
         self.dt = 0.1
         # 定义连续时间系统的参数
-        A_continuous = A
-        B_continuous = B
+        self.A_continuous = A
+        self.B_continuous = B
         C_continuous = np.array([[1, 0]])  # 虽然不需要，但函数需要这个参数
         D_continuous = np.array([[0]])  # 虽然不需要，但函数需要这个参数
         # 使用 cont2discrete 函数将连续时间系统转换为离散时间系统
         # 只提取 A_discrete 和 B_discrete
-        A_discrete, B_discrete, _, _, _ = cont2discrete(
-            (A_continuous, B_continuous, C_continuous, D_continuous), self.dt
+        self.A_discrete, self.B_discrete, _, _, _ = cont2discrete(
+            (self.A_continuous, self.B_continuous, C_continuous, D_continuous), self.dt
         )
-        self.A = t(A_discrete)
-        self.B = t(B_discrete)
+        self.A = t(self.A_discrete)
+        self.B = t(self.B_discrete)
         self.A0 = self.A
         self.B0 = self.B
         
@@ -150,8 +153,34 @@ class LinearSystem():
         self.ref_generator = ref_generator
         
         # for LQR control        
-        self.P = solve_continuous_are(A, B, Q, R) 
-        self.K = (np.linalg.solve(R, B.T)) @ self.P 
+        # self.P = solve_continuous_are(A, B, Q, R) 
+        # self.K = (np.linalg.solve(R, B.T)) @ self.P 
+        self.P = solve_discrete_are(self.A_discrete, self.B_discrete, Q, R) 
+        self.K = (np.linalg.solve(R,  self.B_discrete.T)) @ self.P 
+        
+        # for terminal set calculation
+        # 构造 Hx 和 h
+        self.Hx = np.block([
+            [np.eye(self.n)],
+            [-np.eye(self.n)],# 状态变量的上界和下界
+        ])
+        # hx = np.concatenate([self.x_max, self.x_dot_max, self.theta_max, self.theta_dot_max, -self.x_min, -self.x_dot_min, -self.theta_min, -self.theta_dot_min])
+        self.hx = np.concatenate([
+            x_max,
+            -x_min
+        ]).reshape((4, 1))
+
+        # 构造 Hu 和 h
+        self.Hu = np.array([[1], [-1]])  # 控制输入的上界和下界
+        self.hu = np.array([u_max, -u_min])
+        # 构造 h，将状态和控制输入的上界合并
+        self.h = np.concatenate([self.hx, self.hu]).reshape(-1, 1)
+
+        # 计算闭环系统的状态转移矩阵 Ak
+        self.Ak = self.A_discrete - np.dot(self.B_discrete, self.K)
+        
+        # 计算MCI
+        self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_min, x_max, u_min, u_max, iterations=10)
     
     def get_action_LQR(self, noise_level = None):        
         # 将K转为torch tensor类型
@@ -258,17 +287,56 @@ class LinearSystem():
             if self.ref_generator is not None:
                 return self.ref_generator(size, self.device, self.rng_initial)
             else:
+                # 随机生成x_ref，dx_ref = 0
+                # x_ref = self.x_min + (self.x_max - self.x_min) * torch.rand((size, self.n), generator=self.rng_initial, device=self.device)
+                # x_ref[:, -1] = 0  # 将最后一维的所有元素设置为0 (稳态时速度为0)
+                # x_ref = x_ref.clamp(self.x_min + self.barrier_thresh, self.x_max - self.barrier_thresh)
+                # 稳定到原点
+                x_ref = torch.zeros((size, self.n), device=self.device)
+                
                 # Fall back to default reference generation
-                u_ref = self.u_eq_min + (self.u_eq_max - self.u_eq_min) * torch.rand((size, self.m), generator=self.rng_initial, device=self.device)
-                epsilon = 1e-6
-                A_reg = torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0 + epsilon * torch.eye(self.n, device=self.device).unsqueeze(0)
-                x_ref = bsolve(A_reg, bmv(self.B0, u_ref))
-                # x_ref = bsolve(torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0, bmv(self.B0, u_ref))
-                x_ref += self.barrier_thresh * torch.randn((size, self.n), generator=self.rng_initial, device=self.device)
-                x_ref = x_ref.clamp(self.x_min + self.barrier_thresh, self.x_max - self.barrier_thresh)
+                # u_ref = self.u_eq_min + (self.u_eq_max - self.u_eq_min) * torch.rand((size, self.m), generator=self.rng_initial, device=self.device)
+                # epsilon = 1e-6
+                # A_reg = torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0 + epsilon * torch.eye(self.n, device=self.device).unsqueeze(0)
+                # x_ref = bsolve(A_reg, bmv(self.B0, u_ref))
+                # # x_ref = bsolve(torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0, bmv(self.B0, u_ref))
+                # x_ref += self.barrier_thresh * torch.randn((size, self.n), generator=self.rng_initial, device=self.device)
+                # x_ref = x_ref.clamp(self.x_min + self.barrier_thresh, self.x_max - self.barrier_thresh)
         else:
             return torch.zeros((size, self.n), device=self.device)
         return x_ref
+    
+    def is_point_in_hull(self, point):
+        # 确保点和凸包的顶点都在 CPU 上
+        # point_np = point.cpu().numpy()
+        hull_points_np = self.mci_vertices
+
+        # 创建 ConvexHull 对象
+        hull = ConvexHull(hull_points_np)
+
+        # 检查点是否在凸包内
+        return hull._in_hull(point)
+    
+    # def is_point_in_hull(self, point):
+    #     # 使用 ConvexHull 检查点是否在凸包内
+    #     hull = ConvexHull(self.mci_vertices)
+    #     return hull.points_in_hull(point)
+
+    def generate_random_point_in_hull(self):
+        while True:
+            # 随机选择一个三角形
+            simplex_indices = np.random.choice(len(self.mci_vertices), size=3, replace=False)
+            simplex = self.mci_vertices[simplex_indices]
+
+            # 生成该三角形内的随机点
+            u = np.random.rand(3)
+            u /= u.sum()  # 确保 u 是一个概率分布
+            random_point = np.dot(u, simplex)
+
+            # 检查点是否在凸包内
+            # if self.is_point_in_hull(random_point):
+            #     return random_point
+            return random_point
 
     def generate_initial(self, size):
         """
@@ -277,7 +345,41 @@ class LinearSystem():
         if self.initial_generator is not None:
             return self.initial_generator(size, self.device, self.rng_initial)
         else:
-            x0 = self.x_min + self.barrier_thresh + (self.x_max - self.x_min - 2 * self.barrier_thresh) * torch.rand((size, self.n), generator=self.rng_initial, device=self.device)
+            # x0 = self.x_min + self.barrier_thresh + (self.x_max - self.x_min - 2 * self.barrier_thresh) * torch.rand((size, self.n), generator=self.rng_initial, device=self.device)
+            initial_states_list = []
+
+            for _ in range(size):
+                new_point = self.generate_random_point_in_hull()
+                initial_states_list.append(new_point)
+
+            # 将 NumPy 数组列表转换为 PyTorch 张量
+            x0 = torch.tensor(initial_states_list,dtype=torch.float32, device=self.device).reshape(size, 2)
+
+            # 初始化在MCI内
+            # hull = ConvexHull(self.mci_vertices)
+            # points = self.mci_vertices[hull.vertices]
+            # delaunay = Delaunay(points)
+            
+            # 在 generate_initial 方法中调用 generate_random_point_in_hull 时，确保使用 .cpu().numpy() 转换
+            # x0 = torch.tensor([self.generate_random_point_in_hull().cpu().numpy() for _ in range(size)], device=self.device)
+            '''
+            # 生成凸包内的随机点
+            def generate_random_point_in_hull():
+                while True:
+                    # 随机选择一个三角形
+                    # simplex_indices = self.rng_initial.integers(0, len(hull.simplices), size=3)
+                    simplex_indices = torch.randint(0, len(hull.simplices), size=(3,), generator=self.rng_initial, device=self.device)
+                    simplex = points[simplex_indices]
+                    
+                    # 生成该三角形内的随机点
+                    u = self.rng_initial.random(size=3)
+                    u /= u.sum()  # 确保 u 是一个概率分布
+                    random_point = np.dot(u, simplex)
+                    if hull.points_in_hull(random_point):
+                        return random_point
+            x0 = torch.tensor([generate_random_point_in_hull() for _ in range(size,)], device=self.device)
+            '''
+            
             return x0
 
     def reset_done_envs(self, need_reset=None, x=None, x_ref=None, randomize_seed=None):

@@ -66,14 +66,19 @@ def get_mpc_baseline_parameters(env_name, N, noise_std=0.):
         mpc_parameters["obs_to_state_and_ref"] = obs_to_state_and_ref
     
     if env_name == "double_integrator":
-        A = np.array([
+        A_ct = np.array([
             [0.0, 1.0],
             [0.0, 0.0],
         ])
-        B = np.array([
+        B_ct = np.array([
             [0.0],
             [1.0],
         ])
+        # Discretization
+        dt = sys_param[env_name]["dt"]
+        A = np.eye(2) + dt * A_ct
+        B = dt * B_ct
+        
         mpc_parameters["A"] = A
         mpc_parameters["B"] = B
 

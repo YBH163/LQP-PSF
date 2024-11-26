@@ -2,7 +2,7 @@ from scipy.spatial import ConvexHull
 from scipy.spatial import Delaunay
 import numpy as np
 from tqdm import tqdm_notebook as tqdm
-
+import matplotlib.pyplot as plt
 
 def backward_reachable_set_linear(A_inv, B, X_set, x_min, x_max, u_min, u_max):
     """
@@ -22,8 +22,11 @@ def backward_reachable_set_linear(A_inv, B, X_set, x_min, x_max, u_min, u_max):
     """
     new_set = set()
     for x in X_set:
+        x = np.array(x)  # 将元组转换为 numpy 数组
         for u in np.linspace(u_min, u_max, 5):
-            prev_x = np.dot(A_inv, x - np.dot(B, u))
+            Bu = np.dot(B, u)
+            # prev_x = np.dot(A_inv, x.reshape(-1, 1) - Bu)
+            prev_x = np.dot(A_inv, x - Bu)
             if np.all(x_min <= prev_x) and np.all(prev_x <= x_max):
                 new_set.add(tuple(prev_x))
     return new_set
@@ -161,3 +164,37 @@ def compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10):
         return MCI_hull.points[MCI_hull.vertices, :]
     else:
         return np.array([])
+    
+def main():
+    # 定义双积分系统的动态矩阵 A 和输入矩阵 B
+    A = np.array([[1, 0.1], [0., 1.]])
+    B = np.array([[0.005], [0.1]])
+
+    # 定义状态和控制输入的约束
+    x_min = np.array([-5, -5])
+    x_max = np.array([5, 5])
+    u_min = -0.5
+    u_max = 0.5
+    # 计算 MCI 集合
+    mci_vertices = compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10)
+    
+    # 可视化 MCI 集合
+    plt.figure(figsize=(8, 8))
+    hull = ConvexHull(mci_vertices)
+    plt.plot(hull.points[:, 0], hull.points[:, 1], 'o')
+    for simplex in hull.simplices:
+        plt.plot(hull.points[simplex, 0], hull.points[simplex, 1], 'k-')
+    plt.title("Maximal Control Invariant (MCI) Set for Double Integrator System")
+    plt.xlabel("State x")
+    plt.ylabel("State x_dot")
+    # plt.xlim([x_min[0], x_max[0]])
+    # plt.ylim([x_min[1], x_max[1]])
+    plt.xlim([-1, 1])
+    plt.ylim([-1, 1])
+    plt.grid(True)
+    plt.show()
+    plt.savefig('MCI.png')
+    plt.close()
+
+if __name__ == "__main__":
+    main()
