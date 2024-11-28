@@ -51,7 +51,7 @@ class Integrated_env:
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             # LQR control
-            noise = 8
+            noise = 5
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             ud = ud.squeeze(-1)

@@ -76,8 +76,11 @@ def get_mpc_baseline_parameters(env_name, N, noise_std=0.):
         ])
         # Discretization
         dt = sys_param[env_name]["dt"]
-        A = np.eye(2) + dt * A_ct
-        B = dt * B_ct
+        # A = np.eye(2) + dt * A_ct
+        # B = dt * B_ct
+        # 和环境代码中一致
+        A = np.array([[1, 0.1], [0., 1.]])
+        B = np.array([[0.005], [0.1]])
         
         mpc_parameters["A"] = A
         mpc_parameters["B"] = B

@@ -12,6 +12,7 @@ from ..utils.osqp_utils import osqp_oracle
 from ..utils.np_batch_op import np_batch_op
 import os
 from concurrent.futures import ThreadPoolExecutor
+from ..utils.sets import compute_MCI, construct_polyhedron_from_mci
 
 
 class StrictAffineLayer(nn.Module):
@@ -248,7 +249,12 @@ class QPUnrolledNetwork(nn.Module):
         robust_method = self.mpc_baseline.get("robust_method", None)
         x0, xref = self.mpc_baseline["obs_to_state_and_ref"](x)     # what is x0?
         bs = x.shape[0]
-
+        
+        # comppute MCI Fx ≥ g
+        mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_min"], self.mpc_baseline["states_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=10)
+        if mci_vertices.size > 0:
+            F, g = construct_polyhedron_from_mci(mci_vertices)
+            
         # Conversions between torch and np
         t = lambda a: torch.tensor(a, device=x.device, dtype=torch.float)
         f = lambda t: t.detach().cpu().numpy()
@@ -279,6 +285,8 @@ class QPUnrolledNetwork(nn.Module):
                 self.mpc_baseline["u_max"],
                 x0,
                 xref,
+                F,
+                g,
                 normalize=self.mpc_baseline.get("normalize", False),
                 Qf=self.mpc_baseline.get("terminal_coef", 0.) * t(np.eye(self.mpc_baseline["n_mpc"])) if self.mpc_baseline.get("Qf", None) is None else t(self.mpc_baseline["Qf"]),
             )

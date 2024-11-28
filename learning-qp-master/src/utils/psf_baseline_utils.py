@@ -22,7 +22,7 @@ def generate_random_problem(bs, n, m, device):
     return q, b, P, H
 
 
-def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normalize=False, Qf=None):
+def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, normalize=False, Qf=None):
     """
     Converts Predictive Safety Filter (PSF) problem parameters into Quadratic Programming (QP) form.
 
@@ -66,8 +66,11 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     x0 = x0[:, :-1]
 
     Ax0 = torch.cat([bmv((torch.linalg.matrix_power(A, k + 1)).unsqueeze(0), x0) for k in range(N)], 1)   # (bs, N * n_sys)
-    m = 2 * (n_sys + m_sys) * N   # number of constraints
-    n = m_sys * N                 # number of decision variables
+    m_original = 2 * (n_sys + m_sys) * N   # number of constraints
+    n_original = m_sys * N                 # number of decision variables
+    xN_constraints = g.shape[0]
+    m = m_original + xN_constraints
+    n = n_original + n_sys
 
     # 将（4,1）的numpy array变成（bs，4）的torch tensor
     x_min = torch.from_numpy(x_min).view(-1).repeat(bs, 1).to(device)
@@ -79,9 +82,14 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     b = torch.cat([
         Ax0 - x_min_repeated,
         x_max_repeated - Ax0,
-        -u_min * torch.ones((bs, n), device=device),
-        u_max * torch.ones((bs, n), device=device),
+        -u_min * torch.ones((bs, n_original), device=device),
+        u_max * torch.ones((bs, n_original), device=device),
     ], 1)
+    g_tensor = torch.from_numpy(-g).to(device)  # 注意负号！
+    # 然后，重复 g_tensor 以匹配 b 的批次大小
+    g_repeated = g_tensor.repeat(b.shape[0], 1)
+    # 最后，沿着列的方向（dim=1）追加 g_repeated 到 b
+    b = torch.cat([b, g_repeated], dim=1)
 
     XU = torch.zeros((N, n_sys, N, m_sys), device=device)
     for k in range(N):
@@ -108,8 +116,20 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     P[0, 0] = 1        # only work for action_dim = 1
     P = P.to(device)
     
-    H = torch.cat([XU, -XU, torch.eye(n, device=device), -torch.eye(n, device=device)], 0)  # (m, n)
+    H = torch.cat([XU, -XU, torch.eye(n_original, device=device), -torch.eye(n_original, device=device)], 0)  # (m, n)
 
+    # 首先，将 F 转换为 PyTorch 张量
+    F_tensor = torch.from_numpy(F).to(H.device)
+
+    # 创建填充用的零矩阵
+    zero_matrix_right = torch.zeros((H.shape[0], F_tensor.shape[1]), device=H.device)
+    zero_matrix_bottom = torch.zeros((F_tensor.shape[0], H.shape[1]), device=H.device)
+
+    # 构建分块矩阵
+    H_padded = torch.cat([H, zero_matrix_right], dim=1) # 横着合并
+    F_padded = torch.cat([zero_matrix_bottom, F_tensor], dim=1)
+    H = torch.cat([H_padded, F_padded], dim=0)  # 竖着合并
+    
     if normalize:
         # u = alpha * u_normalized + beta
         alpha = (u_max - u_min) / 2 * torch.ones((m_sys,), device=device)   # (m_MPC,)

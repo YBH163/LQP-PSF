@@ -25,10 +25,11 @@ def backward_reachable_set_linear(A_inv, B, X_set, x_min, x_max, u_min, u_max):
         x = np.array(x)  # 将元组转换为 numpy 数组
         for u in np.linspace(u_min, u_max, 5):
             Bu = np.dot(B, u)
-            prev_x = np.dot(A_inv, x.reshape(-1, 1) - Bu)
+            prev_x = np.dot(A_inv, x.reshape(-1, 1) - Bu.reshape(-1, 1))
             # prev_x = np.dot(A_inv, x - Bu)
             if np.all(x_min <= prev_x) and np.all(prev_x <= x_max):
                 new_set.add(tuple(prev_x.flatten()))
+                # new_set.add(tuple(prev_x))
     return new_set
 
 
