@@ -96,6 +96,7 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     g_repeated = g_tensor.repeat(b.shape[0], 1)
     # 最后，沿着列的方向（dim=1）追加 g_repeated 到 b
     b = torch.cat([b, -g_repeated], dim=1)
+    b = b.float()
 
     XU = torch.zeros((N, n_sys, N, m_sys), device=device)
     for k in range(N):
@@ -126,7 +127,7 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     H = torch.cat([-XU, XU, -torch.eye(n_original, device=device), torch.eye(n_original, device=device)], 0)  # (m, n)
 
     # 首先，将 F 转换为 PyTorch 张量
-    F_tensor = torch.from_numpy(F).to(H.device)
+    F_tensor = torch.from_numpy(F).float().to(H.device)
 
     # 创建填充用的零矩阵
     zero_matrix_right = torch.zeros((H.shape[0], F_tensor.shape[1]), device=H.device)

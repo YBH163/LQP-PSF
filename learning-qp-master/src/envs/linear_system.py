@@ -482,6 +482,7 @@ class LinearSystem():
         self.u = u
         # self.cum_cost += self.cost(self.x - self.x_ref, u)
         w = bmv(self.sqrt_W, torch.randn((self.bs, self.n), generator=self.rng_process, device=self.device))
+        w = w.float()
         self.w0[self.step_count == 0, :] = w[self.step_count == 0, :]
         if not self.skip_to_steady_state:
             self.x = bmv(self.A, self.x) + bmv(self.B, u) + w

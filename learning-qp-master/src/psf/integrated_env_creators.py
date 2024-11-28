@@ -54,6 +54,7 @@ class Integrated_env:
             noise = 5
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
+            ud = ud.clamp(self.env.u_min, self.env.u_max)
             ud = ud.squeeze(-1)
 
         self.ud = ud

@@ -467,6 +467,8 @@ class QPUnrolledNetwork(nn.Module):
         return q, b
 
     def forward(self, x, return_problem_params=False, info=None):
+        # 确保输入 x 是 Float 类型
+        x = x.float()
         bs = x.shape[0]
         if info is not None:
             self.env_info = info

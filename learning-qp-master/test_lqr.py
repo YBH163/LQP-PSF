@@ -135,8 +135,9 @@ def test_lqr(env, num_episodes):
 
         while active_mask.any():  # 只要还有活跃的episode，就继续循环
             # 选择并执行动作，只对活跃的episode
-            v = (0 * torch.randn((bs, 1), device=device))
-            action = env.get_action_LQR(noise_level = 0) + v   # LQR方法生成
+            noise_level = 0
+            v = (noise_level * torch.randn((bs, 1), device=device))
+            action = env.get_action_LQR(noise_level = noise_level) + v   # LQR方法生成
             # action = (10 * torch.randn((bs, 1), device=device))
             action = torch.clamp(action, -0.5, 0.5)
             
