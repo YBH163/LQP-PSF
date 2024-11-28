@@ -251,7 +251,7 @@ class QPUnrolledNetwork(nn.Module):
         bs = x.shape[0]
         
         # comppute MCI Fx ≥ g
-        mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_min"], self.mpc_baseline["states_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=10)
+        mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_min"], self.mpc_baseline["states_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=6)
         if mci_vertices.size > 0:
             F, g = construct_polyhedron_from_mci(mci_vertices)
             

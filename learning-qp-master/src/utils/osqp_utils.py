@@ -10,7 +10,7 @@ def osqp_solve_qp_guarantee_return(
     iter_count = solution.extras["info"].iter
     return sol_returned, iter_count
 
-def osqp_oracle(q, b, P, H, return_iter_count=False, max_iter=5000):
+def osqp_oracle(q, b, P, H, return_iter_count=False, max_iter=2000):
     sol, iter_count = osqp_solve_qp_guarantee_return(
         P=P, q=q, G=-H, h=b,
         A=None, b=None, lb=None, ub=None,

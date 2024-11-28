@@ -79,17 +79,23 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     x_min_repeated = x_min.repeat(1, N)     # repeat(1, N) 表示在第一个维度（bs）上重复1次，在第二个维度（4）上重复N次
     x_max_repeated = x_max.repeat(1, N)
     
+    # b = torch.cat([
+    #     Ax0 - x_min_repeated,
+    #     x_max_repeated - Ax0,
+    #     -u_min * torch.ones((bs, n_original), device=device),
+    #     u_max * torch.ones((bs, n_original), device=device),
+    # ], 1)
     b = torch.cat([
-        Ax0 - x_min_repeated,
         x_max_repeated - Ax0,
-        -u_min * torch.ones((bs, n_original), device=device),
+        Ax0 - x_min_repeated,  
         u_max * torch.ones((bs, n_original), device=device),
+        -u_min * torch.ones((bs, n_original), device=device),
     ], 1)
-    g_tensor = torch.from_numpy(-g).to(device)  # 注意负号！
+    g_tensor = torch.from_numpy(g).to(device)  # 注意负号！
     # 然后，重复 g_tensor 以匹配 b 的批次大小
     g_repeated = g_tensor.repeat(b.shape[0], 1)
     # 最后，沿着列的方向（dim=1）追加 g_repeated 到 b
-    b = torch.cat([b, g_repeated], dim=1)
+    b = torch.cat([b, -g_repeated], dim=1)
 
     XU = torch.zeros((N, n_sys, N, m_sys), device=device)
     for k in range(N):
@@ -116,7 +122,8 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     P[0, 0] = 1        # only work for action_dim = 1
     P = P.to(device)
     
-    H = torch.cat([XU, -XU, torch.eye(n_original, device=device), -torch.eye(n_original, device=device)], 0)  # (m, n)
+    # H = torch.cat([XU, -XU, torch.eye(n_original, device=device), -torch.eye(n_original, device=device)], 0)  # (m, n)
+    H = torch.cat([-XU, XU, -torch.eye(n_original, device=device), torch.eye(n_original, device=device)], 0)  # (m, n)
 
     # 首先，将 F 转换为 PyTorch 张量
     F_tensor = torch.from_numpy(F).to(H.device)
