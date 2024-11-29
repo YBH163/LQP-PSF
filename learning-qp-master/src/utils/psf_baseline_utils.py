@@ -70,7 +70,7 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     n_original = m_sys * N                 # number of decision variables
     xN_constraints = g.shape[0]
     m = m_original + xN_constraints
-    n = n_original + n_sys
+    n = n_original
 
     # 将（4,1）的numpy array变成（bs，4）的torch tensor
     x_min = torch.from_numpy(x_min).view(-1).repeat(bs, 1).to(device)
@@ -94,8 +94,14 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     g_tensor = torch.from_numpy(g).to(device)  # 注意负号！
     # 然后，重复 g_tensor 以匹配 b 的批次大小
     g_repeated = g_tensor.repeat(b.shape[0], 1)
+    ANx0 = bmv((torch.linalg.matrix_power(A, N)).unsqueeze(0), x0)
+    
+    # 首先，将 F 转换为 PyTorch 张量
+    F_tensor = torch.from_numpy(F).float().to(device)
+    # 第一个参数是批次大小，第二个参数是1，意味着在列方向上不重复
+    F_repeated = F_tensor.unsqueeze(0).repeat(b.shape[0], 1, 1)
     # 最后，沿着列的方向（dim=1）追加 g_repeated 到 b
-    b = torch.cat([b, -g_repeated], dim=1)
+    b = torch.cat([b, (F_repeated@(ANx0.unsqueeze(-1))).squeeze(-1)-g_repeated], dim=1)
     b = b.float()
 
     XU = torch.zeros((N, n_sys, N, m_sys), device=device)
@@ -103,10 +109,17 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
         for j in range(k + 1):
             XU[k, :, j, :] = (torch.linalg.matrix_power(A, k - j) @ B)
     XU = XU.flatten(0, 1).flatten(1, 2)   # (N * n_MPC, N * m_MPC)
-
-
-    # q = -2 * XU.t().unsqueeze(0) @ Q_kron.unsqueeze(0) @ (kron(torch.ones((bs, N, 1), device=device), x_ref.unsqueeze(-1)) - Ax0.unsqueeze(-1))   # (bs, N * m_MPC, 1)
-    # q = q.squeeze(-1)  # (bs, N * m_MPC) = (bs, n)
+    
+    # H = torch.cat([XU, -XU, torch.eye(n_original, device=device), -torch.eye(n_original, device=device)], 0)  # (m, n)
+    H = torch.cat([-XU, XU, -torch.eye(n_original, device=device), torch.eye(n_original, device=device)], 0)  # (m, n)
+ 
+    # FAB = (torch.cat([(F@ torch.linalg.matrix_power(A, N-1-k) @B for k in range(N)) ], 1))
+    # 使用 list() 将生成器转换为列表
+    FAB_list = [F_tensor @ torch.linalg.matrix_power(A, N-1-k) @ B for k in range(N)]
+    # 现在 FAB_list 是一个张量列表，可以安全地传递给 torch.cat
+    FAB = torch.cat(FAB_list, dim=1)
+    
+    H = torch.cat([H,FAB],0)
     
     # 创建一个形状为 (batch_size, n_qp) 的全零张量
     q_vector = torch.zeros((bs, n), device=device)
@@ -114,29 +127,12 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     q_vector[:, 0] = -ud.squeeze(-1)  # 赋值并去除多余的维度
     q = q_vector
     
-    # P = 2 * XU.t() @ Q_kron @ XU + 2 * kron(torch.eye(N, device=device), R)  # (n, n)
-    
     eps = 1e-3     # a very small number
     # 创建一个对角线元素全为 eps 的对角阵
     P = torch.diag(torch.full((n,), eps))
     # 将第一行第一列的元素设置为 1
     P[0, 0] = 1        # only work for action_dim = 1
     P = P.to(device)
-    
-    # H = torch.cat([XU, -XU, torch.eye(n_original, device=device), -torch.eye(n_original, device=device)], 0)  # (m, n)
-    H = torch.cat([-XU, XU, -torch.eye(n_original, device=device), torch.eye(n_original, device=device)], 0)  # (m, n)
-
-    # 首先，将 F 转换为 PyTorch 张量
-    F_tensor = torch.from_numpy(F).float().to(H.device)
-
-    # 创建填充用的零矩阵
-    zero_matrix_right = torch.zeros((H.shape[0], F_tensor.shape[1]), device=H.device)
-    zero_matrix_bottom = torch.zeros((F_tensor.shape[0], H.shape[1]), device=H.device)
-
-    # 构建分块矩阵
-    H_padded = torch.cat([H, zero_matrix_right], dim=1) # 横着合并
-    F_padded = torch.cat([zero_matrix_bottom, F_tensor], dim=1)
-    H = torch.cat([H_padded, F_padded], dim=0)  # 竖着合并
     
     if normalize:
         # u = alpha * u_normalized + beta
