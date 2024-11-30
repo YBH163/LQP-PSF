@@ -31,6 +31,8 @@ sys_param = {
         "u_max": 0.5,
         "states_min": np.array([[-5], [-5]]),
         "states_max": np.array([[5], [5]]),
+        "states_safe_min": np.array([[-0.5], [-0.5]]),
+        "states_safe_max": np.array([[0.5], [0.5]]),
         "dt": 0.1,
     },
     "tank": {

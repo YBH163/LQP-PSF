@@ -61,7 +61,7 @@ n = 4
 m = 24
 qp_iter = 10
 device = "cuda:0"
-psf_N = 26
+psf_N = 1
 
 # # Learned QP
 # **get_mpc_baseline_parameters(args.env, args.mpc_baseline_N or args.imitate_mpc_N, noise_std=args.noise_level), "terminal_coef": args.mpc_terminal_cost_coef
@@ -113,6 +113,9 @@ while not done:
 plt.figure(figsize=(12, 6))
 plt.subplot(2, 1, 1)
 plt.plot(xs_qp, label='States')
+# 在 y=1 和 y=-1 处绘制水平虚线
+plt.axhline(y=0.5, color='gray', linestyle='--')
+plt.axhline(y=-0.5, color='gray', linestyle='--')
 plt.xlabel('Time Step')
 plt.ylabel('State Value')
 plt.title('State Over Time')

@@ -152,6 +152,10 @@ class LinearSystem():
         self.initial_generator = initial_generator
         self.ref_generator = ref_generator
         
+        # for safe constraints
+        self.x_safe_min = t(-0.5)
+        self.x_safe_max = t(0.5)
+        
         # for LQR control        
         # self.P = solve_continuous_are(A, B, Q, R) 
         # self.K = (np.linalg.solve(R, B.T)) @ self.P 
@@ -248,7 +252,7 @@ class LinearSystem():
 
     def safe_cost(self):
         # 检查每个状态变量是否越界，返回一个(bs, 2)形状的布尔张量
-        boundary_check = ((self.x < self.x_min) | (self.x > self.x_max))
+        boundary_check = ((self.x < self.x_safe_min) | (self.x > self.x_safe_max))
         # 将布尔张量转换为整数张量，任何状态变量越界则为1，否则为0
         safe_cost = boundary_check.any(dim=-1).int()
         self.info_dict["safe_cost"] = safe_cost
@@ -345,40 +349,16 @@ class LinearSystem():
         if self.initial_generator is not None:
             return self.initial_generator(size, self.device, self.rng_initial)
         else:
+            # initialize randomly in a large area
             # x0 = self.x_min + self.barrier_thresh + (self.x_max - self.x_min - 2 * self.barrier_thresh) * torch.rand((size, self.n), generator=self.rng_initial, device=self.device)
+            
+            # initialize in the MCI
             initial_states_list = []
-
             for _ in range(size):
                 new_point = self.generate_random_point_in_hull()
                 initial_states_list.append(new_point)
-
             # 将 NumPy 数组列表转换为 PyTorch 张量
-            x0 = torch.tensor(initial_states_list,dtype=torch.float32, device=self.device).reshape(size, 2)
-
-            # 初始化在MCI内
-            # hull = ConvexHull(self.mci_vertices)
-            # points = self.mci_vertices[hull.vertices]
-            # delaunay = Delaunay(points)
-            
-            # 在 generate_initial 方法中调用 generate_random_point_in_hull 时，确保使用 .cpu().numpy() 转换
-            # x0 = torch.tensor([self.generate_random_point_in_hull().cpu().numpy() for _ in range(size)], device=self.device)
-            '''
-            # 生成凸包内的随机点
-            def generate_random_point_in_hull():
-                while True:
-                    # 随机选择一个三角形
-                    # simplex_indices = self.rng_initial.integers(0, len(hull.simplices), size=3)
-                    simplex_indices = torch.randint(0, len(hull.simplices), size=(3,), generator=self.rng_initial, device=self.device)
-                    simplex = points[simplex_indices]
-                    
-                    # 生成该三角形内的随机点
-                    u = self.rng_initial.random(size=3)
-                    u /= u.sum()  # 确保 u 是一个概率分布
-                    random_point = np.dot(u, simplex)
-                    if hull.points_in_hull(random_point):
-                        return random_point
-            x0 = torch.tensor([generate_random_point_in_hull() for _ in range(size,)], device=self.device)
-            '''
+            x0 = torch.tensor(initial_states_list,dtype=torch.float32, device=self.device).reshape(size, 2)   
             
             return x0
 
