@@ -13,8 +13,8 @@ class Integrated_env:
         self.bs = self.env.bs
         self.device = self.env.device
         self.train_or_test = kwargs["train_or_test"]
-        self.u_min = self.env.u_min
-        self.u_max = self.env.u_max
+        self.u_min = self.env.u_min.item()  # 仅取值
+        self.u_max = self.env.u_max.item()
         
         # Gym environment settings
         self.action_space = self.env.action_space
@@ -37,7 +37,14 @@ class Integrated_env:
         theta = obs[..., 2]
         if self.train_or_test == "train":
             # generate randomly (only work for action_dim = 1)
-            ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
+            # ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
+            
+            noise = 1
+            v = (noise * torch.randn((self.bs, 1), device=self.device))
+            ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
+            # ud = v
+            ud = ud.clamp(self.env.u_min, self.env.u_max)
+            ud = ud.squeeze(-1)
         elif self.train_or_test == "test":
             # bang-bang control
             # 当 theta 大于 0 度时，u 应该小于 0；当 theta 小于 0 度时，u 应该大于 0
@@ -51,7 +58,7 @@ class Integrated_env:
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             # LQR control
-            noise = 8
+            noise = 1
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             # ud = v
@@ -90,13 +97,19 @@ class Integrated_env:
     
     def reward(self,original_reward, action):
         # original_reward = -self.env.safe_cost()
-        coef_safety = 10000.0
+        coef_safety = 10.0
         safe_cost = coef_safety * original_reward
         # deviation = torch.norm(self.ud - action, p=2) ** 2
         deviation = (self.ud - action.squeeze()) ** 2
-        coef_deviation = 0.1
+        coef_deviation = 1.0
         deviation_cost = -coef_deviation * deviation
-        combined_reward = safe_cost + deviation_cost  # 注意正负号！！
+        
+        # 添加存活奖励
+        coef_survival = 10  # 存活奖励系数，可以根据需要调整
+        survival_reward = coef_survival  # 每个步骤的存活奖励
+        
+        combined_reward = safe_cost + deviation_cost + survival_reward  # 注意正负号！！！
+        # combined_reward = safe_cost + deviation_cost  # 注意正负号！！
         if not self.env.quiet:
             avg_safe_cost = safe_cost.float().mean().item()
             avg_deviation_cost = deviation_cost.mean().item()
