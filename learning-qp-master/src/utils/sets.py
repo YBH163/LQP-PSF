@@ -3,6 +3,7 @@ from scipy.spatial import Delaunay
 import numpy as np
 from tqdm import tqdm_notebook as tqdm
 import matplotlib.pyplot as plt
+import pickle
 
 def backward_reachable_set_linear(A_inv, B, X_set, x_min, x_max, u_min, u_max):
     """
@@ -216,6 +217,10 @@ def plot_halfspaces(F, g, vertices):
     plt.ylabel("y")
     plt.show()
 
+# 将计算结果保存为文件，供环境初始化时使用。以节约每次训练和测试的时间
+def save_mci(mci_vertices, filename='mci.pkl'):
+    with open(filename, 'wb') as f:
+        pickle.dump(mci_vertices, f)
 
 def main():
     # 定义双积分系统的动态矩阵 A 和输入矩阵 B
@@ -229,7 +234,9 @@ def main():
     u_max = 0.5
     # 计算 MCI 集合
     mci_vertices = compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=20)
+    # save_mci(mci_vertices)
     
+    # 可视化生成的多面体
     if mci_vertices.size > 0:
         F, g = construct_polyhedron_from_mci(mci_vertices)
         plot_halfspaces(F, g, mci_vertices)

@@ -5,6 +5,7 @@ from src.envs.cartpole import CartPole
 from src.envs.env_creators import env_creators, sys_param
 import gym
 from icecream import ic
+import matplotlib.pyplot as plt
 
 class Integrated_env:
     def __init__(self, env_name, **kwargs):
@@ -31,6 +32,14 @@ class Integrated_env:
         self.state_space = self.observation_space
         self.num_states = self.env.num_states + self.env.num_actions    # different
         self.num_actions = self.env.num_actions
+        
+        # 可视化
+        self.xs = []  # 用于记录状态历史
+        self.us = []  # 用于记录动作历史
+        self.uds = []  # 用于记录动作历史
+        self.visualize = False
+        if self.bs==1 and self.train_or_test=="test":
+            self.visualize = True
     
     def get_ud(self, obs):
         # x, x_dot, theta, theta_dot, x_ref = self.env.obs()
@@ -129,7 +138,7 @@ class Integrated_env:
         elif self.train_or_test == "test":
             return safe_cost      # original safe cost
     
-    def step(self, action):    
+    def step(self, action):   
         # 用ud进行测试时
         # original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
         # reward = self.reward(original_reward, self.ud)
@@ -137,6 +146,15 @@ class Integrated_env:
         # 正常测试
         original_obs, original_reward, done, info = self.env.step(action)   
         reward = self.reward(original_reward, action)
+        
+        # 可视化
+        if self.visualize:
+            self.uds.append(self.ud.cpu().numpy())   # 获取ud
+            self.us.append(action[0, :].detach().cpu().numpy())
+            self.xs.append(original_obs[0, :2].detach().cpu().numpy())
+            if done:
+                self.visualize_trajectory()
+        
         # get next ud
         self.get_ud(original_obs)   # update ud every step
         return self.obs(), reward, done, info
@@ -153,6 +171,30 @@ class Integrated_env:
     def get_num_parallel(self):
         return self.env.get_num_parallel()
 
+    def visualize_trajectory(self):
+        plt.figure(figsize=(12, 6))
+        plt.subplot(2, 1, 1)
+        plt.plot(self.xs, label='States')
+        # 在 y=1 和 y=-1 处绘制水平虚线
+        plt.axhline(y=0.5, color='gray', linestyle='--')
+        plt.axhline(y=-0.5, color='gray', linestyle='--')
+        plt.xlabel('Time Step')
+        plt.ylabel('State Value')
+        plt.title('State Over Time')
+        plt.legend()
+
+        plt.subplot(2, 1, 2)
+        plt.plot(self.us, label='u')
+        plt.plot(self.uds, label='ud')
+        plt.xlabel('Time Step')
+        plt.ylabel('Control Value')
+        plt.title('Control Over Time')
+        plt.legend()
+
+        plt.tight_layout()
+        plt.show()
+        plt.savefig("mlp_trajectory.png")  # 保存图表
+        plt.close()
 
 integrated_env_creators = {
     "double_integrator": lambda **kwargs: Integrated_env("double_integrator", **kwargs),

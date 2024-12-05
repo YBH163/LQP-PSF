@@ -13,6 +13,7 @@ from scipy.linalg import solve_discrete_are
 from scipy.signal import cont2discrete
 from ..utils.sets import compute_MCI
 from scipy.spatial import ConvexHull , Delaunay
+import pickle
 
 class LinearSystem():
     def __init__(
@@ -186,7 +187,12 @@ class LinearSystem():
         self.Ak = self.A_discrete - np.dot(self.B_discrete, self.K)
         
         # 计算MCI
-        self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
+        # self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
+        self.mci_vertices = self.load_mci()
+    
+    def load_mci(self, filename='mci.pkl'):
+        with open(filename, 'rb') as f:
+            return pickle.load(f)
     
     def get_action_LQR(self, noise_level = None):        
         # 将K转为torch tensor类型
