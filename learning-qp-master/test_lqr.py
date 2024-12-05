@@ -28,8 +28,8 @@ bs = 1
 exp_name = f"test_lqr"
 
 # Initial position and reference position
-state0 = [1,-1]
-x_ref = [-3,0]
+state0 = [-1,0]
+x_ref = [0,0]
 
 # 创建环境实例
 env = env_creators["double_integrator"](
@@ -122,10 +122,12 @@ def test_lqr(env, num_episodes):
     # 测试循环
     for episode in range(num_episodes):
         # 自定义初始状态
-        # t = lambda arr: torch.tensor(arr, device=device, dtype=torch.float).unsqueeze(0)
-        # env.reset(t(state0[0]), t(x_ref))
-        # obs = make_obs(state0, x_ref)
-        obs = env.reset()
+        t = lambda arr: torch.tensor(arr, device=device, dtype=torch.float).unsqueeze(0)
+        env.reset(t(state0[0]), t(x_ref))
+        obs = make_obs(state0, x_ref)
+        
+        # obs = env.reset()       # 随机初始化
+        
         episode_reward = torch.zeros(bs, dtype=torch.float32).to('cuda:0')
         episode_length = torch.zeros(bs, dtype=torch.int32).to('cuda:0')
         active_mask = torch.ones(bs, dtype=torch.bool).to('cuda:0')  # 初始化活跃掩码

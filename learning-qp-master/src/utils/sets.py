@@ -223,18 +223,19 @@ def main():
     B = np.array([[0.005], [0.1]])
 
     # 定义状态和控制输入的约束
-    x_min = np.array([-5, -5])
-    x_max = np.array([5, 5])
+    x_min = np.array([-0.5, -0.5])
+    x_max = np.array([0.5, 0.5])
     u_min = -0.5
     u_max = 0.5
     # 计算 MCI 集合
-    mci_vertices = compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10)
+    mci_vertices = compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=20)
     
     if mci_vertices.size > 0:
         F, g = construct_polyhedron_from_mci(mci_vertices)
         plot_halfspaces(F, g, mci_vertices)
         plt.savefig('Polyhedron.png')
         plt.close()
+        
     # 可视化 MCI 集合
     # plt.figure(figsize=(8, 8))
     # hull = ConvexHull(mci_vertices)
@@ -244,10 +245,10 @@ def main():
     # plt.title("Maximal Control Invariant (MCI) Set for Double Integrator System")
     # plt.xlabel("State x")
     # plt.ylabel("State x_dot")
-    # # plt.xlim([x_min[0], x_max[0]])
-    # # plt.ylim([x_min[1], x_max[1]])
-    # plt.xlim([-1, 1])
-    # plt.ylim([-1, 1])
+    # plt.xlim([x_min[0], x_max[0]])
+    # plt.ylim([x_min[1], x_max[1]])
+    # # plt.xlim([-1, 1])
+    # # plt.ylim([-1, 1])
     # plt.grid(True)
     # plt.show()
     # plt.savefig('MCI.png')

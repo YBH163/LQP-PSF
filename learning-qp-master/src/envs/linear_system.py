@@ -153,6 +153,8 @@ class LinearSystem():
         self.ref_generator = ref_generator
         
         # for safe constraints
+        x_safe_min = -0.5
+        x_safe_max = 0.5
         self.x_safe_min = t(-0.5)
         self.x_safe_max = t(0.5)
         
@@ -184,7 +186,7 @@ class LinearSystem():
         self.Ak = self.A_discrete - np.dot(self.B_discrete, self.K)
         
         # 计算MCI
-        self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_min, x_max, u_min, u_max, iterations=10)
+        self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
     
     def get_action_LQR(self, noise_level = None):        
         # 将K转为torch tensor类型
