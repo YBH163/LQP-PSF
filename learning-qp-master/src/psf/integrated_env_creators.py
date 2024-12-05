@@ -48,9 +48,9 @@ class Integrated_env:
             # generate randomly (only work for action_dim = 1)
             # ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
             
-            noise = 0.1
+            noise = 0.3
             v = (noise * torch.randn((self.bs, 1), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声
+            ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             # ud = v
             ud = ud.clamp(self.env.u_min, self.env.u_max)
             ud = ud.squeeze(-1)
@@ -67,7 +67,7 @@ class Integrated_env:
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             # LQR control
-            noise = 1
+            noise = 0.5
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             # ud = v
@@ -105,19 +105,21 @@ class Integrated_env:
     #     return self.env.cost(*args, **kwargs)
     
     def reward(self,original_reward, action):
-        coef_original = 0.1
+        coef_original = 0.
         original_reward = coef_original * original_reward
         
-        safe_cost = -self.env.safe_cost()
-        coef_safety = 50.0
-        safe_cost = coef_safety * safe_cost
+        original_safe_cost = -self.env.safe_cost()
+        coef_safety = 80.0
+        safe_cost = coef_safety * original_safe_cost
         # deviation = torch.norm(self.ud - action, p=2) ** 2
         deviation = (self.ud - action.squeeze()) ** 2
-        coef_deviation = 10.0
-        deviation_cost = -coef_deviation * deviation
+        coef_deviation = 50.0
+        # deviation_cost = -coef_deviation * deviation
+        # 当 deviation 不等于 0 时，计算 deviation_cost；否则，设置为 10
+        deviation_cost = torch.where(deviation == 0, torch.full_like(deviation, 10), -coef_deviation * deviation)
         
         # 添加存活奖励
-        coef_survival = 0.0  # 存活奖励系数，可以根据需要调整
+        coef_survival = 10.0  # 存活奖励系数，可以根据需要调整
         survival_reward = coef_survival  # 每个步骤的存活奖励
         
         # 添加出界惩罚
@@ -136,7 +138,7 @@ class Integrated_env:
         if self.train_or_test == "train":
             return combined_reward
         elif self.train_or_test == "test":
-            return safe_cost      # original safe cost
+            return original_safe_cost      # original safe cost
     
     def step(self, action):   
         # 用ud进行测试时
