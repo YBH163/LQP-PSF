@@ -475,7 +475,7 @@ class LinearSystem():
             done_indices = torch.nonzero(self.is_done.to(dtype=torch.bool) & torch.logical_not(self.already_on_stats), as_tuple=False)
             for i in done_indices:
                 self.write_episode_stats(i)
-        return self.obs(), -self.safe_cost(), self.done(), self.info()
+        return self.obs(), self.reward(), self.done(), self.info()
 
     def render(self, **kwargs):
         """

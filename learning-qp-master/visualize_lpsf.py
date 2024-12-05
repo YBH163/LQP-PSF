@@ -99,8 +99,8 @@ xs_qp.append(obs[0, :2].cpu().numpy())
 while not done:
     ud.append(obs[0, -1].detach().cpu().numpy())   # 获取ud
     action_all, problem_params = net(obs, return_problem_params=True)
-    # u = rescale_action(action_all[:, :m_sys])
-    u = action_all[:, :m_sys]
+    u = rescale_action(action_all[:, :m_sys])
+    # u = action_all[:, :m_sys]
     raw_obs, reward, done_t, info = env.step(u)
     # xs_qp.append(raw_obs[0, :2].cpu().numpy())    # 获取两个状态变量
     xs_qp.append(raw_obs[0, :2].detach().cpu().numpy())

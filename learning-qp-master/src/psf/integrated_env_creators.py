@@ -34,14 +34,14 @@ class Integrated_env:
     
     def get_ud(self, obs):
         # x, x_dot, theta, theta_dot, x_ref = self.env.obs()
-        theta = obs[..., 2]
+        # theta = obs[..., 2]
         if self.train_or_test == "train":
             # generate randomly (only work for action_dim = 1)
             # ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
             
-            noise = 1
+            noise = 0.1
             v = (noise * torch.randn((self.bs, 1), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
+            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声
             # ud = v
             ud = ud.clamp(self.env.u_min, self.env.u_max)
             ud = ud.squeeze(-1)
@@ -96,29 +96,38 @@ class Integrated_env:
     #     return self.env.cost(*args, **kwargs)
     
     def reward(self,original_reward, action):
-        # original_reward = -self.env.safe_cost()
-        coef_safety = 10.0
-        safe_cost = coef_safety * original_reward
+        coef_original = 0.1
+        original_reward = coef_original * original_reward
+        
+        safe_cost = -self.env.safe_cost()
+        coef_safety = 50.0
+        safe_cost = coef_safety * safe_cost
         # deviation = torch.norm(self.ud - action, p=2) ** 2
         deviation = (self.ud - action.squeeze()) ** 2
-        coef_deviation = 1.0
+        coef_deviation = 10.0
         deviation_cost = -coef_deviation * deviation
         
         # 添加存活奖励
-        coef_survival = 10  # 存活奖励系数，可以根据需要调整
+        coef_survival = 0.0  # 存活奖励系数，可以根据需要调整
         survival_reward = coef_survival  # 每个步骤的存活奖励
         
-        combined_reward = safe_cost + deviation_cost + survival_reward  # 注意正负号！！！
+        # 添加出界惩罚
+        bound_cost = (action.squeeze() > self.u_max).float() * 1000 + (action.squeeze() < self.u_min).float() * 1000
+        bound_cost = bound_cost * (bound_cost > 0).float()  # 确保只有越界的时候才为1000，否则为0
+
+        combined_reward = original_reward + safe_cost + deviation_cost + survival_reward - bound_cost  # 注意正负号！！！
         # combined_reward = safe_cost + deviation_cost  # 注意正负号！！
         if not self.env.quiet:
             avg_safe_cost = safe_cost.float().mean().item()
             avg_deviation_cost = deviation_cost.mean().item()
+            avg_bound_cost = bound_cost.mean().item()
             ic(avg_safe_cost)
             ic(avg_deviation_cost)
+            ic(avg_bound_cost)
         if self.train_or_test == "train":
             return combined_reward
         elif self.train_or_test == "test":
-            return original_reward      # original safe cost
+            return safe_cost      # original safe cost
     
     def step(self, action):    
         # 用ud进行测试时
