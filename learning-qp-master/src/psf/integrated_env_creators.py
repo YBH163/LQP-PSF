@@ -6,6 +6,7 @@ from src.envs.env_creators import env_creators, sys_param
 import gym
 from icecream import ic
 import matplotlib.pyplot as plt
+from torch.distributions import Beta
 
 class Integrated_env:
     def __init__(self, env_name, **kwargs):
@@ -40,6 +41,13 @@ class Integrated_env:
         self.visualize = False
         if self.bs==1 and self.train_or_test=="test":
             self.visualize = True
+            
+    def get_noise(self):
+        # 创建一个Beta分布，alpha和beta的值可以根据需要调整
+        dist = Beta(torch.tensor([1.0]), torch.tensor([10.0]))
+        noise = dist.sample() * 3  # 缩放到0到3的范围
+        noise = noise.to(self.device)
+        return noise
     
     def get_ud(self, obs):
         # x, x_dot, theta, theta_dot, x_ref = self.env.obs()
@@ -48,6 +56,7 @@ class Integrated_env:
             # generate randomly (only work for action_dim = 1)
             # ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
             
+            #noise = self.get_noise()
             noise = 0.3
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
@@ -67,7 +76,7 @@ class Integrated_env:
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             # LQR control
-            noise = 0.5
+            noise = 1
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             # ud = v
@@ -82,7 +91,9 @@ class Integrated_env:
         if self.train_or_test == "train":
             init_ud = self.get_ud(init_obs)
         elif self.train_or_test == "test":
-            init_ud = torch.zeros(self.env.bs, device=self.device)     # cuz initial theta is small (0.1)
+            # init_ud = torch.zeros(self.env.bs, device=self.device)     # cuz initial theta is small (0.1)
+            # self.ud = init_ud
+            init_ud = self.get_ud(init_obs)
             self.ud = init_ud
         combined_obs = torch.cat((init_obs, init_ud.unsqueeze(-1)), dim=-1)
         return combined_obs
@@ -105,7 +116,7 @@ class Integrated_env:
     #     return self.env.cost(*args, **kwargs)
     
     def reward(self,original_reward, action):
-        coef_original = 0.
+        coef_original = 0.0
         original_reward = coef_original * original_reward
         
         original_safe_cost = -self.env.safe_cost()

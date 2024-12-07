@@ -1,0 +1,2 @@
+i,x0,x_ref,A,B,w0,episode_length,cumulative_cost,constraint_violated
+0,[[0.29009685 0.18629694]],[[0. 0.]],[1.  0.1 0.  1. ],[0.005 0.1  ],[[0. 0.]],132,0.0,True
