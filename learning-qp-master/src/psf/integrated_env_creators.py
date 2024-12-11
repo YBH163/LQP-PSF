@@ -76,7 +76,7 @@ class Integrated_env:
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             # LQR control
-            noise = 1
+            noise = 0.5
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             # ud = v
@@ -124,10 +124,10 @@ class Integrated_env:
         safe_cost = coef_safety * original_safe_cost
         # deviation = torch.norm(self.ud - action, p=2) ** 2
         deviation = (self.ud - action.squeeze()) ** 2
-        coef_deviation = 50.0
+        coef_deviation = 60.0
         # deviation_cost = -coef_deviation * deviation
         # 当 deviation 不等于 0 时，计算 deviation_cost；否则，设置为 10
-        deviation_cost = torch.where(deviation == 0, torch.full_like(deviation, 10), -coef_deviation * deviation)
+        deviation_cost = torch.where(deviation == 0, torch.full_like(deviation, 30), -coef_deviation * deviation)
         
         # 添加存活奖励
         coef_survival = 10.0  # 存活奖励系数，可以根据需要调整
@@ -137,15 +137,21 @@ class Integrated_env:
         bound_cost = (action.squeeze() > self.u_max).float() * 1000 + (action.squeeze() < self.u_min).float() * 1000
         bound_cost = bound_cost * (bound_cost > 0).float()  # 确保只有越界的时候才为1000，否则为0
 
-        combined_reward = original_reward + safe_cost + deviation_cost + survival_reward - bound_cost  # 注意正负号！！！
+        # 添加提前terminate惩罚
+        terminate_cost = -1.0 * (self.env.is_done == 1)
+        coef_terminate = 100000.
+
+        combined_reward = original_reward + safe_cost + deviation_cost + survival_reward - bound_cost + terminate_cost  # 注意正负号！！！
         # combined_reward = safe_cost + deviation_cost  # 注意正负号！！
         if not self.env.quiet:
             avg_safe_cost = safe_cost.float().mean().item()
             avg_deviation_cost = deviation_cost.mean().item()
             avg_bound_cost = bound_cost.mean().item()
+            avg_terminate_cost = coef_terminate * terminate_cost.mean().item()
             ic(avg_safe_cost)
             ic(avg_deviation_cost)
             ic(avg_bound_cost)
+            ic(avg_terminate_cost)
         if self.train_or_test == "train":
             return combined_reward
         elif self.train_or_test == "test":
