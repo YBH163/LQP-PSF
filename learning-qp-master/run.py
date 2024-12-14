@@ -22,6 +22,8 @@ from src.networks.a2c_qp_unrolled import A2CQPUnrolledBuilder
 
 model_builder.register_network('qp_unrolled', A2CQPUnrolledBuilder)
 
+torch.set_default_dtype(torch.float64)
+
 @contextmanager
 def suppress_stdout_stderr():
     """A context manager that redirects stdout and stderr to devnull"""

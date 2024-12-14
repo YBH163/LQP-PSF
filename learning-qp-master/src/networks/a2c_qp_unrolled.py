@@ -109,6 +109,7 @@ class A2CQPUnrolled(A2CBuilder.Network):
 
     def forward(self, obs_dict):
         obs = obs_dict['obs']
+        obs = obs.double()
         info = obs_dict.get('info', {})
         mu = self.policy_net(obs, info=info)[:, :self.actions_num]
         value = self.value_net(obs)

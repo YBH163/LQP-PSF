@@ -76,6 +76,7 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         assert False
 
     def calc_gradients(self, input_dict):
+        # 从 input_dict 中获取旧的值预测、旧的动作对数概率、优势函数、旧的均值和标准差、回报、动作、观察值等
         value_preds_batch = input_dict['old_values']
         old_action_log_probs_batch = input_dict['old_logp_actions']
         advantage = input_dict['advantages']
@@ -84,12 +85,13 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         return_batch = input_dict['returns']
         actions_batch = input_dict['actions']
         obs_batch = input_dict['obs']
-        obs_batch = self._preproc_obs(obs_batch)
+        obs_batch = self._preproc_obs(obs_batch)    # 对观察值进行预处理
         gt_batch = input_dict.get("ground_truths", None)
 
         lr_mul = 1.0
         curr_e_clip = self.e_clip
 
+        # 创建一个包含训练所需信息的 batch_dict
         batch_dict = {
             'is_train': True,
             'prev_actions': actions_batch, 
@@ -97,13 +99,15 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
         }
 
         rnn_masks = None
+        # 如果模型使用RNN，获取RNN掩码、状态、序列长度和完成标志
         if self.is_rnn:
             rnn_masks = input_dict['rnn_masks']
             batch_dict['rnn_states'] = input_dict['rnn_states']
             batch_dict['seq_length'] = self.seq_len
             batch_dict['dones'] = input_dict['dones']
             
-        with torch.cuda.amp.autocast(enabled=self.mixed_precision):
+        with torch.cuda.amp.autocast(enabled=self.mixed_precision): # 使用 torch.cuda.amp.autocast 进行混合精度训练，减少内存使用并提高性能
+            # 前向传播，得到新的动作对数概率、值估计、熵、均值、标准差等
             res_dict = self.model(batch_dict)
             action_log_probs = res_dict['prev_neglogp']
             values = res_dict['values']
@@ -113,19 +117,23 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
             prediction = res_dict.get("prediction", None)
             autonomous_losses = res_dict.get("autonomous_losses", None)
 
+            # 计算演员损失（a_loss），这是策略梯度损失，衡量新旧动作对数概率的差异
             a_loss = self.actor_loss_func(old_action_log_probs_batch, action_log_probs, advantage, self.ppo, curr_e_clip)
 
             if self.has_value_loss:
+                # 计算评论家损失（c_loss），这是值函数损失，衡量预测值与回报的差异
                 c_loss = common_losses.critic_loss(value_preds_batch, values, curr_e_clip, return_batch, self.clip_value)
             else:
                 c_loss = torch.zeros(1, device=self.ppo_device)
             if self.bound_loss_type == 'regularisation':
                 b_loss = self.reg_loss(mu)
             elif self.bound_loss_type == 'bound':
+                # 计算边界损失（b_loss），用于限制动作的输出范围
                 b_loss = self.bound_loss(mu)
             else:
                 b_loss = torch.zeros(1, device=self.ppo_device)
             if prediction is not None:
+                # 如果存在预测任务，计算监督损失（s_loss），这是预测值与真实值的差异
                 s_loss = (prediction - gt_batch) ** 2
 
             loss_terms = [a_loss.unsqueeze(1), c_loss , entropy.unsqueeze(1), b_loss.unsqueeze(1)]
@@ -148,7 +156,7 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
                 coef_a_loss = 0.0
             else:
                 coef_a_loss = 1.0
-
+            # 将所有损失项组合成总损失，包括演员损失、评论家损失、熵损失和边界损失
             loss = coef_a_loss * a_loss + 0.5 * c_loss * self.critic_coef - entropy * self.entropy_coef + b_loss * self.bounds_loss_coef
 
             if prediction is not None:
@@ -157,17 +165,21 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
                 for l in autonomous_losses.values():
                     loss += l
             
+            # 如果使用多GPU，使用 self.optimizer.zero_grad() 清零梯度；否则，手动将模型参数的梯度设置为None
             if self.multi_gpu:
                 self.optimizer.zero_grad()
             else:
                 for param in self.model.parameters():
                     param.grad = None
 
+        # 使用 self.scaler.scale(loss).backward() 进行反向传播，计算梯度。这里 self.scaler 可能是一个梯度缩放器，用于混合精度训练中的梯度缩放
         self.scaler.scale(loss).backward()
         #TODO: Refactor this ugliest code of they year
+        # 进行梯度裁剪和参数更新
         self.trancate_gradients_and_step()
 
         with torch.no_grad():
+            # 使用 torch_ext.policy_kl 计算新旧策略之间的KL散度，用于监控策略更新的幅度
             reduce_kl = rnn_masks is None
             kl_dist = torch_ext.policy_kl(mu.detach(), sigma.detach(), old_mu_batch, old_sigma_batch, reduce_kl)
             if rnn_masks is not None:
@@ -182,6 +194,7 @@ class A2CAgent(a2c_common.ContinuousA2CBase):
             'masks' : rnn_masks
         }, curr_e_clip, 0)      
 
+        # 将损失、KL散度、学习率、梯度裁剪系数等存储在 self.train_result 中
         self.train_result = (a_loss, c_loss, entropy, \
             kl_dist, self.last_lr, lr_mul, \
             mu.detach(), sigma.detach(), b_loss)

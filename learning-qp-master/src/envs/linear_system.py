@@ -81,7 +81,7 @@ class LinearSystem():
         self.device = device
         self.n = A.shape[0]
         self.m = B.shape[1]
-        t = lambda a: torch.tensor(a, dtype=torch.float, device=device).unsqueeze(0)
+        t = lambda a: torch.tensor(a, device=device).unsqueeze(0)
         self.A = t(A)
         self.B = t(B)
         self.Q = t(Q)
@@ -196,7 +196,7 @@ class LinearSystem():
     
     def get_action_LQR(self, noise_level = None):        
         # 将K转为torch tensor类型
-        K_tensor = torch.from_numpy(self.K).to(self.device, dtype=torch.float32)
+        K_tensor = torch.from_numpy(self.K).to(self.device)
         # LQR控制律
         if noise_level is None:
             action = K_tensor @ ((self.x_ref-self.x).T)
@@ -366,7 +366,7 @@ class LinearSystem():
                 new_point = self.generate_random_point_in_hull()
                 initial_states_list.append(new_point)
             # 将 NumPy 数组列表转换为 PyTorch 张量
-            x0 = torch.tensor(initial_states_list,dtype=torch.float32, device=self.device).reshape(size, 2)   
+            x0 = torch.tensor(initial_states_list, device=self.device).reshape(size, 2)   
             
             return x0
 
@@ -470,7 +470,7 @@ class LinearSystem():
         self.u = u
         # self.cum_cost += self.cost(self.x - self.x_ref, u)
         w = bmv(self.sqrt_W, torch.randn((self.bs, self.n), generator=self.rng_process, device=self.device))
-        w = w.float()
+        # w = w.float()
         self.w0[self.step_count == 0, :] = w[self.step_count == 0, :]
         if not self.skip_to_steady_state:
             self.x = bmv(self.A, self.x) + bmv(self.B, u) + w

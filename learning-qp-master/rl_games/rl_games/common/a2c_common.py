@@ -272,6 +272,8 @@ class A2CBase(BaseAlgorithm):
             all_grads_list = []
             for param in self.model.parameters():
                 if param.grad is not None:
+                    if torch.isnan(param.grad).any():
+                        print(f"NaN gradient detected")
                     all_grads_list.append(param.grad.view(-1))
             all_grads = torch.cat(all_grads_list)
             dist.all_reduce(all_grads, op=dist.ReduceOp.SUM)
@@ -283,6 +285,11 @@ class A2CBase(BaseAlgorithm):
                     )
                     offset += param.numel()
 
+        for param in self.model.parameters():
+            if param.grad is not None:
+                if torch.isnan(param.grad).any():
+                    print(f"NaN gradient detected")
+        
         if self.truncate_grads:
             self.scaler.unscale_(self.optimizer)
             nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_norm)
@@ -1109,6 +1116,8 @@ class ContinuousA2CBase(A2CBase):
         for mini_ep in range(0, self.mini_epochs_num):
             ep_kls = []
             for i in range(len(self.dataset)):
+                if i == 17:
+                    print(f"stop!")
                 train_results = self.train_actor_critic(self.dataset[i])
                 if len(train_results) == 9:
                     has_s_loss = False
@@ -1245,6 +1254,8 @@ class ContinuousA2CBase(A2CBase):
 
         while True:
             epoch_num = self.update_epoch()
+            if epoch_num == 2651:
+                print(f"take caution!")
             step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, s_losses, auto_losses, entropies, kls, last_lr, lr_mul = self.train_epoch()
             total_time += sum_time
             frame = self.frame // self.num_agents

@@ -137,9 +137,9 @@ class QPUnrolledNetwork(nn.Module):
             self.qb_affine_layer = None
         else:
             if not self.strict_affine_layer:
-                self.qb_affine_layer = nn.Linear(input_size, self.n_b_param, bias=not self.symmetric)
+                self.qb_affine_layer = nn.Linear(input_size, self.n_b_param, bias=not self.symmetric).to(self.device)
             else:
-                self.qb_affine_layer = StrictAffineLayer(input_size, self.n_qp, self.m_qp, self.obs_has_half_ref)
+                self.qb_affine_layer = StrictAffineLayer(input_size, self.n_qp, self.m_qp, self.obs_has_half_ref).to(self.device)
 
         if self.n_mlp_output > 0:
             self.mlp = mlp_builder(input_size, self.n_mlp_output)
@@ -355,7 +355,7 @@ class QPUnrolledNetwork(nn.Module):
             H_params = self.H_params.unsqueeze(0)
 
         # Reshape H vector into matrices
-        H = H_params.view(-1, self.m_qp, self.n_qp)
+        H = H_params.view(-1, self.m_qp, self.n_qp).to(self.device)
 
         # If the problem is forced to be feasible, compute the parameters (\tilde{P}, \tilde{H}) of the augmented problem
         # \tilde{P} = [P, 0; 0, lambda]
@@ -468,7 +468,7 @@ class QPUnrolledNetwork(nn.Module):
 
     def forward(self, x, return_problem_params=False, info=None):
         # 确保输入 x 是 Float 类型
-        x = x.float()
+        x = x.double()      # 如果用float64的话
         bs = x.shape[0]
         if info is not None:
             self.env_info = info
