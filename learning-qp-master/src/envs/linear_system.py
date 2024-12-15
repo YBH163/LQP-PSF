@@ -264,6 +264,7 @@ class LinearSystem():
         # 将布尔张量转换为整数张量，任何状态变量越界则为1，否则为0
         safe_cost = boundary_check.any(dim=-1).int()
         self.info_dict["safe_cost"] = safe_cost
+        self.info_dict["actual_costs"] = safe_cost
         return safe_cost
 
     def done(self):
