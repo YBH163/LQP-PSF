@@ -163,29 +163,8 @@ class LinearSystem():
         # self.P = solve_continuous_are(A, B, Q, R) 
         # self.K = (np.linalg.solve(R, B.T)) @ self.P 
         self.P = solve_discrete_are(self.A_discrete, self.B_discrete, Q, R) 
-        self.K = (np.linalg.solve(R,  self.B_discrete.T)) @ self.P 
-        
-        # for terminal set calculation
-        # 构造 Hx 和 h
-        self.Hx = np.block([
-            [np.eye(self.n)],
-            [-np.eye(self.n)],# 状态变量的上界和下界
-        ])
-        # hx = np.concatenate([self.x_max, self.x_dot_max, self.theta_max, self.theta_dot_max, -self.x_min, -self.x_dot_min, -self.theta_min, -self.theta_dot_min])
-        self.hx = np.concatenate([
-            x_max,
-            -x_min
-        ]).reshape((4, 1))
+        self.K = (np.linalg.solve(R, self.B_discrete.T)) @ self.P 
 
-        # 构造 Hu 和 h
-        self.Hu = np.array([[1], [-1]])  # 控制输入的上界和下界
-        self.hu = np.array([u_max, -u_min])
-        # 构造 h，将状态和控制输入的上界合并
-        self.h = np.concatenate([self.hx, self.hu]).reshape(-1, 1)
-
-        # 计算闭环系统的状态转移矩阵 Ak
-        self.Ak = self.A_discrete - np.dot(self.B_discrete, self.K)
-        
         # 计算MCI
         # self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
         self.mci_vertices = self.load_mci()
@@ -300,10 +279,6 @@ class LinearSystem():
             if self.ref_generator is not None:
                 return self.ref_generator(size, self.device, self.rng_initial)
             else:
-                # 随机生成x_ref，dx_ref = 0
-                # x_ref = self.x_min + (self.x_max - self.x_min) * torch.rand((size, self.n), generator=self.rng_initial, device=self.device)
-                # x_ref[:, -1] = 0  # 将最后一维的所有元素设置为0 (稳态时速度为0)
-                # x_ref = x_ref.clamp(self.x_min + self.barrier_thresh, self.x_max - self.barrier_thresh)
                 # 稳定到原点
                 x_ref = torch.zeros((size, self.n), device=self.device)
                 
@@ -318,22 +293,6 @@ class LinearSystem():
         else:
             return torch.zeros((size, self.n), device=self.device)
         return x_ref
-    
-    def is_point_in_hull(self, point):
-        # 确保点和凸包的顶点都在 CPU 上
-        # point_np = point.cpu().numpy()
-        hull_points_np = self.mci_vertices
-
-        # 创建 ConvexHull 对象
-        hull = ConvexHull(hull_points_np)
-
-        # 检查点是否在凸包内
-        return hull._in_hull(point)
-    
-    # def is_point_in_hull(self, point):
-    #     # 使用 ConvexHull 检查点是否在凸包内
-    #     hull = ConvexHull(self.mci_vertices)
-    #     return hull.points_in_hull(point)
 
     def generate_random_point_in_hull(self):
         while True:
@@ -367,8 +326,7 @@ class LinearSystem():
                 new_point = self.generate_random_point_in_hull()
                 initial_states_list.append(new_point)
             # 将 NumPy 数组列表转换为 PyTorch 张量
-            x0 = torch.tensor(initial_states_list, device=self.device).reshape(size, 2)   
-            
+            x0 = torch.tensor(initial_states_list, device=self.device).reshape(size, 2)           
             return x0
 
     def reset_done_envs(self, need_reset=None, x=None, x_ref=None, randomize_seed=None):

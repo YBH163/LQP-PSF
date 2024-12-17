@@ -211,7 +211,6 @@ class QPUnrolledNetwork(nn.Module):
             self.solver = QPSolver(self.device, n_qp_actual, m_qp_actual, warm_starter=self.warm_starter_delayed, is_warm_starter_trainable=False, symmetric_constraint=self.symmetric, buffered=self.force_feasible)
         else:
             # Should be called after loading state dict
-            # Pinv, H = self.get_PH()
             H = self.get_H()
             Pinv = self.Pinv.unsqueeze(0).repeat(1, 1, 1)  # shape: (1,nqp,nqp)
             if self.force_feasible:
@@ -257,21 +256,13 @@ class QPUnrolledNetwork(nn.Module):
             F, g = construct_polyhedron_from_mci(mci_vertices)
             
         # Conversions between torch and np
-        t = lambda a: torch.tensor(a, device=x.device, dtype=torch.float)
+        t = lambda a: torch.tensor(a, device=x.device)
         f = lambda t: t.detach().cpu().numpy()
         f_sparse = lambda t: scipy.sparse.csc_matrix(t.cpu().numpy())
 
         if robust_method is None:
             # Run vanilla MPC without robustness
             eps = 1e-3
-            # A = self.mpc_baseline["A"]
-            # # 将 NumPy 数组转换为 PyTorch 张量
-            # A_tensor = torch.from_numpy(A).float()
-            # A_tensor = A_tensor.to(x.device)
-            # B = self.mpc_baseline["B"]
-            # # 将 NumPy 数组转换为 PyTorch 张量
-            # B_tensor = torch.from_numpy(B).float()
-            # B_tensor = B_tensor.to(x.device)
             n, m, P, q, H, b = psf2qp(
                 self.mpc_baseline["n_mpc"],
                 self.mpc_baseline["m_mpc"],
@@ -396,77 +387,6 @@ class QPUnrolledNetwork(nn.Module):
             b = tilde_b
         return b
 
-    def get_PH(self, mlp_out=None):
-        """
-        Compute P, H matrices from the parameters.
-        Notice: returns (Pinv, H) instead of (P, H)
-        """
-        # Decode MLP output
-        end = 0
-        if not self.shared_PH:
-            start = end
-            end = start + self.n_P_param
-            P_params = mlp_out[:, start:end]
-            start = end
-            end = start + self.n_H_param
-            H_params = mlp_out[:, start:end]
-        else:
-            P_params = self.P_params.unsqueeze(0)
-            H_params = self.H_params.unsqueeze(0)
-
-        # Reshape P, H vectors into matrices
-        Pinv = make_psd(P_params, min_eig=1e-2)
-        H = H_params.view(-1, self.m_qp, self.n_qp)
-
-        # If the problem is forced to be feasible, compute the parameters (\tilde{P}, \tilde{H}) of the augmented problem
-        # \tilde{P} = [P, 0; 0, lambda]
-        if self.force_feasible:
-            zeros_n = torch.zeros((1, self.n_qp, 1), device=self.device)
-            I = torch.eye(1, device=self.device).unsqueeze(0)
-            tilde_P_inv = torch.cat([
-                torch.cat([Pinv, zeros_n], dim=2),
-                torch.cat([zeros_n.transpose(1, 2), 1 / self.feasible_lambda * I], dim=2)
-            ], dim=1)
-            # \tilde{H} = [H, I; 0, I]
-            ones_m = torch.ones((1, self.m_qp, 1), device=self.device)
-            tilde_H = torch.cat([
-                torch.cat([H, ones_m], dim=2),
-                torch.cat([zeros_n.transpose(1, 2), I], dim=2)
-            ], dim=1)
-            Pinv, H = tilde_P_inv, tilde_H
-        return Pinv, H  # 如果 self.shared_PH 为 True 且 self.force_feasible 为 False，则维度为 (1, m_qp, n_qp)...
-
-    def get_qb(self, x, mlp_out=None):
-        """
-        Compute q, b vectors from the parameters.
-        """
-        bs = x.shape[0]
-        end = self.n_P_param + self.n_H_param if not self.shared_PH else 0
-        if not self.affine_qb:
-            start = end
-            end = start + self.n_q_param
-            q = mlp_out[:, start:end]
-            start = end
-            end = start + self.n_b_param
-            b = mlp_out[:, start:end]
-        else:
-            qb = self.qb_affine_layer(x)
-            q = qb[:, :self.n_q_param]
-            b = qb[:, self.n_q_param:]
-        if self.no_b:
-            b = torch.zeros((bs, self.m_qp), device=self.device)
-
-        # If the problem is forced to be feasible, compute the parameters (\tilde{q}, \tilde{b}) of the augmented problem
-        if self.force_feasible:
-            zeros_1 = torch.zeros((bs, 1), device=self.device)
-            # \tilde{q} = [q; 0]
-            tilde_q = torch.cat([q, zeros_1], dim=1)
-            # \tilde{b} = [b; 0]
-            tilde_b = torch.cat([b, zeros_1], dim=1)
-            q, b = tilde_q, tilde_b
-
-        return q, b
-
     def forward(self, x, return_problem_params=False, info=None):
         # 确保输入 x 是 Float 类型
         x = x.double()      # 如果用float64的话
@@ -484,9 +404,6 @@ class QPUnrolledNetwork(nn.Module):
             # Check whether solver has been initialized
             if self.solver is None:
                 self.initialize_solver()
-
-            # bs = x.shape[0]
-
             # Run MLP forward pass, if necessary
             if self.mlp is not None:
                 mlp_out = self.mlp(x)
@@ -495,7 +412,6 @@ class QPUnrolledNetwork(nn.Module):
 
             # Compute P, H, if they are not fixed
             if not self.fixed_PH:
-                # Pinv, H = self.get_PH(mlp_out)
                 # Pinv = self.Pinv.unsqueeze(0).repeat(bs, 1, 1)  # shape: (bs,nqp,nqp)
                 Pinv = self.Pinv.unsqueeze(0).repeat(1, 1, 1)  # shape: (1,nqp,nqp)
                 if self.force_feasible:
@@ -511,8 +427,7 @@ class QPUnrolledNetwork(nn.Module):
             else:
                 Pinv, H = None, None
 
-            # Compute b, q
-            # q, b = self.get_qb(x, mlp_out)            
+            # Compute b, q            
             b = self.get_b(x0, mlp_out)
             
             # 获取 x 的最后一个数据，并增加新的维度，生成形状为 (batch_size, 1) 的张量

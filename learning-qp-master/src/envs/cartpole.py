@@ -7,8 +7,10 @@ import random
 from datetime import datetime
 from icecream import ic
 from ..utils.torch_utils import conditional_fork_rng, bsolve, bqf, get_rng
-from scipy.linalg import solve_continuous_are
-
+from scipy.linalg import solve_continuous_are, solve_discrete_are
+from scipy.signal import cont2discrete
+import pickle
+from ..utils.sets import compute_MCI
 
 class CartPole():
     def __init__(self, parameters, Q, R, noise_std, x_min, x_max, u_min, u_max, bs, barrier_thresh, max_steps, device="cuda:0", random_seed=None, quiet=False, keep_stats=False,
@@ -69,13 +71,13 @@ class CartPole():
         self.l_min = parameters["l"][0]
         self.l_max = parameters["l"][1]
         self.noise_std = noise_std
-        t = lambda arr: torch.tensor(arr, device=device, dtype=torch.float).unsqueeze(0)
+        t = lambda arr: torch.tensor(arr, device=device).unsqueeze(0)
         self.Q = t(Q)
         self.R = t(R)
 
         # Dynamics
-        batch_ones = lambda shape: torch.ones((bs,) + shape, dtype=torch.float32, device=device)
-        single_ones = lambda shape: torch.ones((1,) + shape, dtype=torch.float32, device=device)
+        batch_ones = lambda shape: torch.ones((bs,) + shape, device=device)
+        single_ones = lambda shape: torch.ones((1,) + shape, device=device)
         self.m_pole = self.m_pole_min * batch_ones(tuple())
         self.m_cart = self.m_cart_min * batch_ones(tuple())
         self.l = self.l_min * batch_ones(tuple())
@@ -92,18 +94,13 @@ class CartPole():
         self.u_max = u_max
         self.bs = bs
         
-        # Safety constraints
-        self.x_threshold_min = self.x_min
-        self.x_threshold_max = self.x_max
-        self.theta_threshold_min = self.theta_min / 2.0
-        self.theta_threshold_max = self.theta_max / 2.0
         self.x_dot_max = 100
         self.x_dot_min = -100
         self.theta_dot_max = 100
         self.theta_dot_min = -100
 
         # States, references, inputs
-        batch_zeros = lambda shape: torch.zeros((bs,) + shape, dtype=torch.float32, device=device)
+        batch_zeros = lambda shape: torch.zeros((bs,) + shape, device=device)
         self.initial_state = batch_zeros((4,))
         self.x = batch_zeros(tuple())
         self.x_ref = batch_zeros(tuple())
@@ -115,12 +112,12 @@ class CartPole():
         # Episode information
         self.is_done = torch.zeros((bs,), dtype=torch.uint8, device=device)
         self.step_count = torch.zeros((bs,), dtype=torch.int32, device=device)
-        self.cumulative_cost = torch.zeros((bs,), dtype=torch.float32, device=device)
+        self.cumulative_cost = torch.zeros((bs,), device=device)
 
         # Gym environment settings
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,))
         self.state_space = self.observation_space
-        self.action_space = gym.spaces.Box(low=self.u_min, high=self.u_max, shape=(1,), dtype=np.float32)
+        self.action_space = gym.spaces.Box(low=self.u_min, high=self.u_max, shape=(1,))
         self.num_states = 6
         self.num_actions = 1
 
@@ -156,66 +153,52 @@ class CartPole():
         ])
 
         # Discretization
-        # self.A = np.eye(4) + self.dt * self.A_ct
-        # self.B = self.dt * self.B_ct
+        # 使用 cont2discrete 函数将连续时间系统转换为离散时间系统
+        # 只提取 A_discrete 和 B_discrete
+        self.A_dt, self.B_dt, _, _, _ = cont2discrete(
+            (self.A_ct, self.B_ct, np.zeros((self.A_ct.shape[0], self.B_ct.shape[1]))), self.dt
+        )
+        
         self.A = self.A_ct
         self.B = self.B_ct
         
-        self.P = solve_continuous_are(self.A, self.B, Q, R) 
-        self.K = (np.linalg.solve(R, self.B.T)) @ self.P 
+        # for LQR control
+        # self.P = solve_continuous_are(self.A, self.B, Q, R) 
+        # self.K = (np.linalg.solve(R, self.B.T)) @ self.P
+        self.P = solve_discrete_are(self.A_discrete, self.B_discrete, Q, R) 
+        self.K = (np.linalg.solve(R, self.B_discrete.T)) @ self.P 
         
-        # for terminal set calculation
-        self.n_sys = 4
-        self.m_sys = 1
-        # 构造 Hx 和 h
-        self.Hx = np.block([
-            [np.eye(self.n_sys)],
-            [-np.eye(self.n_sys)],# 状态变量的上界和下界
-        ])
-        # hx = np.concatenate([self.x_max, self.x_dot_max, self.theta_max, self.theta_dot_max, -self.x_min, -self.x_dot_min, -self.theta_min, -self.theta_dot_min])
-        self.hx = np.concatenate([
-            np.array([self.x_max]), np.array([self.x_dot_max]), np.array([self.theta_max]), np.array([self.theta_dot_max]),
-            np.array([-self.x_min]), np.array([-self.x_dot_min]), np.array([-self.theta_min]), np.array([-self.theta_dot_min])
-        ])
-
-        # 构造 Hu 和 h
-        self.Hu = np.array([[1], [-1]])  # 控制输入的上界和下界
-        self.hu = np.array([u_max, -u_min])
-        # 构造 h，将状态和控制输入的上界合并
-        self.h = np.concatenate([self.hx, self.hu]).reshape(-1, 1)
-
-        # 计算闭环系统的状态转移矩阵 Ak
-        self.Ak = self.A - np.dot(self.B, self.K)
+        # Safety constraints
+        self.x_safe_min = self.x_min
+        self.x_safe_max = self.x_max
+        self.theta_safe_min = self.theta_min / 2.0
+        self.theta_safe_max = self.theta_max / 2.0
         
-        # 测试，当只考虑上界约束
-        self.Hx = np.eye(self.n_sys)
-        self.hx = np.concatenate([
-            np.array([self.x_max]), np.array([self.x_dot_max]), np.array([self.theta_max]), np.array([self.theta_dot_max]),
-        ])
-        self.Hu = np.array([[1]])
-        self.hu = np.array([u_max])
-        self.h = np.concatenate([self.hx, self.hu]).reshape(-1, 1)
+        # 计算MCI
+        self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
+        # self.mci_vertices = self.load_mci()
         
         self.reset()
-
+        
+    def load_mci(self, filename='cartpole_mci.pkl'):
+        with open(filename, 'rb') as f:
+            return pickle.load(f)
+        
     def get_action_LQR(self, noise_level = None):        
         # 当前状态向量
         x_tensors = [self.x, self.x_dot, self.theta, self.theta_dot]
         x = torch.stack(x_tensors, dim=0) 
-        # x = torch.cat([t.unsqueeze(-1) for t in [self.theta, self.theta_dot, self.alpha, self.alpha_dot]], dim=0)
         
         # 参考状态向量
-        batch_zeros = lambda shape: torch.zeros((self.bs,) + shape, dtype=torch.float32, device=self.device)
+        batch_zeros = lambda shape: torch.zeros((self.bs,) + shape, device=self.device)
         x_ref_tensors = [self.x_ref, batch_zeros(tuple()), batch_zeros(tuple()), batch_zeros(tuple())]
         x_ref = torch.stack(x_ref_tensors, dim=0)
 
         # 将K转为torch tensor类型
-        K_tensor = torch.from_numpy(self.K).to(self.device, dtype=torch.float32)
+        K_tensor = torch.from_numpy(self.K).to(self.device)
         # LQR控制律
         if noise_level is None:
             action = K_tensor @ ((x_ref-x))
-            # 得到的是1*bs的，还需要转置一下成为bs*1的才行
-            action_transposed = action.t()  # (bs,1)
         else:
             # 生成一个与K_tensor形状相同，均值为0，标准差为noise_level的高斯噪声
             noise = torch.randn_like(K_tensor) * noise_level
@@ -223,8 +206,9 @@ class CartPole():
             K_tensor_noisy = K_tensor + noise
             # 使用带有噪声的K_tensor_noisy
             action = K_tensor_noisy @ ((x_ref - x))
-            # 得到的是1*bs的，还需要转置一下成为bs*1的才行
-            action_transposed = action.t()  # (bs,1)
+            
+        # 得到的是1*bs的，还需要转置一下成为bs*1的才行
+        action_transposed = action.t()  # (bs,1)
         # action_transposed = action_transposed.squeeze(-1)   #(bs,)
         return action_transposed
 
@@ -275,8 +259,8 @@ class CartPole():
         return rew_total
 
     def safe_cost(self):
-        # safe_cost = int(self.x < self.x_threshold_min or self.x > self.x_threshold_max or self.theta < self.theta_threshold_min or self.theta > self.theta_threshold_max)
-        safe_cost = ((self.x < self.x_threshold_min) | (self.x > self.x_threshold_max) | (self.theta < self.theta_threshold_min) | (self.theta > self.theta_threshold_max)).int()
+        # safe_cost = int(self.x < self.x_safe_min or self.x > self.x_safe_max or self.theta < self.theta_safe_min or self.theta > self.theta_safe_max)
+        safe_cost = ((self.x < self.x_safe_min) | (self.x > self.x_safe_max) | (self.theta < self.theta_safe_min) | (self.theta > self.theta_safe_max)).int()
         self.info_dict["safe_cost"] =safe_cost
         return safe_cost
 
@@ -454,7 +438,7 @@ class CartPole():
                 self.write_episode_stats(i)
 
         # Return observation, reward, done, info
-        return self.obs(), -self.safe_cost(), self.done(), self.info()
+        return self.obs(), self.safe_cost(), self.done(), self.info()
 
     def render(self, **kwargs):
         """Renders the environment. Currently, it just prints out state variables and average cost."""
