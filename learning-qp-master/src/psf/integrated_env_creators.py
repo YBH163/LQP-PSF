@@ -69,7 +69,7 @@ class Integrated_env:
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             
             # LQR control
-            noise = 1
+            noise = 0
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             ud = ud.clamp(self.env.u_min, self.env.u_max)
@@ -141,18 +141,18 @@ class Integrated_env:
     
     def step(self, action):   
         # 用ud进行测试时
-        # original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
-        # reward = self.reward(original_reward, self.ud)
+        original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
+        reward = self.reward(original_reward, self.ud)
         
         # 正常测试
-        original_obs, original_reward, done, info = self.env.step(action)   
-        reward = self.reward(original_reward, action)
+        # original_obs, original_reward, done, info = self.env.step(action)   
+        # reward = self.reward(original_reward, action)
         
         # 可视化
         if self.visualize:
             self.uds.append(self.ud.cpu().numpy())   # 获取ud
             self.us.append(action[0, :].detach().cpu().numpy())
-            self.xs.append(original_obs[0, :2].detach().cpu().numpy())
+            self.xs.append(original_obs[0, :].detach().cpu().numpy())
             if done:
                 self.visualize_trajectory()
         
@@ -175,10 +175,22 @@ class Integrated_env:
     def visualize_trajectory(self):
         plt.figure(figsize=(12, 6))
         plt.subplot(2, 1, 1)
-        plt.plot(self.xs, label='States')
-        # 在 y=1 和 y=-1 处绘制水平虚线
-        plt.axhline(y=0.5, color='gray', linestyle='--')
-        plt.axhline(y=-0.5, color='gray', linestyle='--')
+        # plt.plot(self.xs, label='States')
+        state_array = np.array(self.xs)  # 将列表转换为 NumPy 数组
+        
+        if self.env_name == "cartpole":
+            for i, state_label in enumerate(['x', 'x_dot', 'theta', 'theta_dot', 'x_ref']):
+                plt.plot(state_array[:,i], label=f'{state_label}')
+                # 在 y=0.5 和 y=-0.5 处绘制水平虚线
+                plt.axhline(y=0.5, color='gray', linestyle='--')
+                plt.axhline(y=-0.5, color='gray', linestyle='--')
+        elif self.env_name == "double_integrator":
+            for i, state_label in enumerate(['x', 'x_dot']):
+                plt.plot(state_array[:,i], label=f'{state_label}')
+                # 在 y=0.5 和 y=-0.5 处绘制水平虚线
+                plt.axhline(y=0.5, color='gray', linestyle='--')
+                plt.axhline(y=-0.5, color='gray', linestyle='--')
+        
         plt.xlabel('Time Step')
         plt.ylabel('State Value')
         plt.title('State Over Time')

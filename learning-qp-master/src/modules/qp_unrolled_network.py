@@ -251,9 +251,9 @@ class QPUnrolledNetwork(nn.Module):
         bs = x.shape[0]
         
         # comppute MCI Fx ≥ g
-        mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_min"], self.mpc_baseline["states_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=6)
-        if mci_vertices.size > 0:
-            F, g = construct_polyhedron_from_mci(mci_vertices)
+        # mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_min"], self.mpc_baseline["states_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=6)
+        # if mci_vertices.size > 0:
+        #     F, g = construct_polyhedron_from_mci(mci_vertices)
             
         # Conversions between torch and np
         t = lambda a: torch.tensor(a, device=x.device)
@@ -277,10 +277,10 @@ class QPUnrolledNetwork(nn.Module):
                 self.mpc_baseline["u_max"],
                 x0,
                 xref,
-                F,
-                g,
                 normalize=self.mpc_baseline.get("normalize", False),
                 Qf=self.mpc_baseline.get("terminal_coef", 0.) * t(np.eye(self.mpc_baseline["n_mpc"])) if self.mpc_baseline.get("Qf", None) is None else t(self.mpc_baseline["Qf"]),
+                # F = F,
+                # g = g,
             )
             if not use_osqp_oracle:
                 solver = QPSolver(x.device, n, m, P=P, H=H)

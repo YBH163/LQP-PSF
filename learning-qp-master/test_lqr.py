@@ -31,17 +31,31 @@ exp_name = f"test_lqr"
 state0 = [-1,0]
 x_ref = [0,0]
 
+env_name = "cartpole"
 # 创建环境实例
-env = env_creators["double_integrator"](
+# env = env_creators["double_integrator"](
+#     noise_level=noise_level,
+#     bs=bs,
+#     max_steps=300,
+#     keep_stats=True,
+#     run_name=exp_name,
+#     exp_name=exp_name,
+#     randomize=parametric_uncertainty,
+#     quiet = True,
+#     # Q = np.diag([10., 1e-4, 100., 1e-4]),
+#     # R = np.array([[1]]),
+#     device = device
+# )
+env = env_creators[env_name](
     noise_level=noise_level,
     bs=bs,
-    max_steps=300,
+    max_steps=100,
     keep_stats=True,
     run_name=exp_name,
     exp_name=exp_name,
     randomize=parametric_uncertainty,
     quiet = True,
-    # Q = np.diag([10., 1e-4, 100., 1e-4]),
+    # Q = np.diag([10., 0, 100., 0]),
     # R = np.array([[1]]),
     device = device
 )
@@ -122,11 +136,11 @@ def test_lqr(env, num_episodes):
     # 测试循环
     for episode in range(num_episodes):
         # 自定义初始状态
-        t = lambda arr: torch.tensor(arr, device=device, dtype=torch.float).unsqueeze(0)
-        env.reset(t(state0[0]), t(x_ref))
-        obs = make_obs(state0, x_ref)
+        # t = lambda arr: torch.tensor(arr, device=device, dtype=torch.float).unsqueeze(0)
+        # env.reset(t(state0[0]), t(x_ref))
+        # obs = make_obs(state0, x_ref)
         
-        # obs = env.reset()       # 随机初始化
+        obs = env.reset()       # 随机初始化
         
         episode_reward = torch.zeros(bs, dtype=torch.float32).to('cuda:0')
         episode_length = torch.zeros(bs, dtype=torch.int32).to('cuda:0')
@@ -139,10 +153,10 @@ def test_lqr(env, num_episodes):
             # 选择并执行动作，只对活跃的episode
             noise_level = 0
             v = (noise_level * torch.randn((bs, 1), device=device))
-            # action = env.get_action_LQR(noise_level = noise_level) + v   # LQR方法生成
-            action = env.get_action_LQR(noise_level = 0) + v
+            action = env.get_action_LQR(noise_level = noise_level) + v   # LQR方法生成
+            # action = env.get_action_LQR(noise_level = 0) + v
             # action = (10 * torch.randn((bs, 1), device=device))
-            action = torch.clamp(action, -0.5, 0.5)
+            action = torch.clamp(action, env.u_min, env.u_max)
             
             # 假设 self.eval_env.step 接受 PyTorch 张量作为输入，并且只对活跃的episode进行操作
             next_obs, reward, terminal, _ = env.step(action)
@@ -190,14 +204,24 @@ def test_lqr(env, num_episodes):
 def plot_states_controls(states, controls):
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 1, 1)
-    plt.plot(states[0], label='States')
+    # plt.plot(states[0], label='States')
+    
+    state_array = np.array(states[0])  # 将列表转换为 NumPy 数组
+    # 我们将为每个状态值绘制一条线，并设置不同的标签
+    if env_name == "cartpole":
+        for i, state_label in enumerate(['x', 'x_dot', 'theta', 'theta_dot', 'x_ref']):
+            plt.plot(state_array[:,i], label=f'{state_label}')
+    elif env_name == "double_integrator":
+        for i, state_label in enumerate(['x', 'x_dot']):
+            plt.plot(state_array[:,i], label=f'{state_label}')
+    
     plt.xlabel('Time Step')
     plt.ylabel('State Value')
     plt.title('State Over Time')
     plt.legend()
 
     plt.subplot(2, 1, 2)
-    plt.plot(controls[0], label='Controls')
+    plt.plot(controls[0], label='u')
     plt.xlabel('Time Step')
     plt.ylabel('Control Value')
     plt.title('Control Over Time')
@@ -209,7 +233,7 @@ def plot_states_controls(states, controls):
 if __name__ == "__main__":    
     num_episodes = 100  # 假设我们想要100个episodes的数据
     is_test = 1
-    is_visualize = 1
+    is_visualize = 0
     save_interval = 10  # 每10个episodes保存一次数据
     if is_test:
         if is_visualize:

@@ -22,7 +22,7 @@ def generate_random_problem(bs, n, m, device):
     return q, b, P, H
 
 
-def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, normalize=False, Qf=None):
+def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normalize=False, Qf=None, F = None, g = None):
     """
     Converts Predictive Safety Filter (PSF) problem parameters into Quadratic Programming (QP) form.
 
@@ -61,17 +61,21 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     device = x0.device
     
     # 获取 x 的最后一个数据，并增加新的维度，生成形状为 (batch_size, 1) 的张量
-    ud = x0[:, -1].unsqueeze(-1)    # x0 or x?
+    ud = x0[:, -1].unsqueeze(-1)    
     # 使用索引去掉最后一列
     x0 = x0[:, :-1]
 
     Ax0 = torch.cat([bmv((torch.linalg.matrix_power(A, k + 1)).unsqueeze(0), x0) for k in range(N)], 1)   # (bs, N * n_sys)
     m_original = 2 * (n_sys + m_sys) * N   # number of constraints
     n_original = m_sys * N                 # number of decision variables
-    xN_constraints = g.shape[0]
-    m = m_original + xN_constraints
-    n = n_original
-
+    if (F != None) and (g != None):
+        xN_constraints = g.shape[0]
+        m = m_original + xN_constraints
+        n = n_original
+    else:
+        m = m_original
+        n = n_original
+        
     # 将（4,1）的numpy array变成（bs，4）的torch tensor
     x_min = torch.from_numpy(x_min).view(-1).repeat(bs, 1).to(device)
     x_max = torch.from_numpy(x_max).view(-1).repeat(bs, 1).to(device)
@@ -91,18 +95,20 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
         u_max * torch.ones((bs, n_original), device=device),
         -u_min * torch.ones((bs, n_original), device=device),
     ], 1)
-    g_tensor = torch.from_numpy(g).to(device)  # 注意负号！
-    # 然后，重复 g_tensor 以匹配 b 的批次大小
-    g_repeated = g_tensor.repeat(b.shape[0], 1)
-    ANx0 = bmv((torch.linalg.matrix_power(A, N)).unsqueeze(0), x0)
     
-    # 首先，将 F 转换为 PyTorch 张量
-    F_tensor = torch.from_numpy(F).float().to(device)
-    # 第一个参数是批次大小，第二个参数是1，意味着在列方向上不重复
-    F_repeated = F_tensor.unsqueeze(0).repeat(b.shape[0], 1, 1)
-    # 最后，沿着列的方向（dim=1）追加 g_repeated 到 b
-    b = torch.cat([b, (F_repeated@(ANx0.unsqueeze(-1))).squeeze(-1)-g_repeated], dim=1)
-    b = b.float()
+    if (F != None) and (g != None):
+        g_tensor = torch.from_numpy(g).to(device)  # 注意负号！
+        # 然后，重复 g_tensor 以匹配 b 的批次大小
+        g_repeated = g_tensor.repeat(b.shape[0], 1)
+        ANx0 = bmv((torch.linalg.matrix_power(A, N)).unsqueeze(0), x0)
+        
+        # 首先，将 F 转换为 PyTorch 张量
+        F_tensor = torch.from_numpy(F).float().to(device)
+        # 第一个参数是批次大小，第二个参数是1，意味着在列方向上不重复
+        F_repeated = F_tensor.unsqueeze(0).repeat(b.shape[0], 1, 1)
+        # 最后，沿着列的方向（dim=1）追加 g_repeated 到 b
+        b = torch.cat([b, (F_repeated@(ANx0.unsqueeze(-1))).squeeze(-1)-g_repeated], dim=1)
+    # b = b.float()
 
     XU = torch.zeros((N, n_sys, N, m_sys), device=device)
     for k in range(N):
@@ -113,13 +119,14 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, F, g, n
     # H = torch.cat([XU, -XU, torch.eye(n_original, device=device), -torch.eye(n_original, device=device)], 0)  # (m, n)
     H = torch.cat([-XU, XU, -torch.eye(n_original, device=device), torch.eye(n_original, device=device)], 0)  # (m, n)
  
-    # FAB = (torch.cat([(F@ torch.linalg.matrix_power(A, N-1-k) @B for k in range(N)) ], 1))
-    # 使用 list() 将生成器转换为列表
-    FAB_list = [F_tensor @ torch.linalg.matrix_power(A, N-1-k) @ B for k in range(N)]
-    # 现在 FAB_list 是一个张量列表，可以安全地传递给 torch.cat
-    FAB = torch.cat(FAB_list, dim=1)
-    
-    H = torch.cat([H,FAB],0)
+    if (F != None) and (g != None):
+        # FAB = (torch.cat([(F@ torch.linalg.matrix_power(A, N-1-k) @B for k in range(N)) ], 1))
+        # 使用 list() 将生成器转换为列表
+        FAB_list = [F_tensor @ torch.linalg.matrix_power(A, N-1-k) @ B for k in range(N)]
+        # 现在 FAB_list 是一个张量列表，可以安全地传递给 torch.cat
+        FAB = torch.cat(FAB_list, dim=1)
+        
+        H = torch.cat([H,FAB],0)
     
     # 创建一个形状为 (batch_size, n_qp) 的全零张量
     q_vector = torch.zeros((bs, n), device=device)

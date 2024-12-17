@@ -88,10 +88,10 @@ class CartPole():
         # State and input bounds
         self.x_min = x_min
         self.x_max = x_max
-        self.theta_min = -0.5
-        self.theta_max = 0.5
-        self.u_min = u_min
-        self.u_max = u_max
+        self.theta_min = -1
+        self.theta_max = 1
+        self.u_min = t(u_min)
+        self.u_max = t(u_max)
         self.bs = bs
         
         self.x_dot_max = 100
@@ -117,7 +117,7 @@ class CartPole():
         # Gym environment settings
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,))
         self.state_space = self.observation_space
-        self.action_space = gym.spaces.Box(low=self.u_min, high=self.u_max, shape=(1,))
+        self.action_space = gym.spaces.Box(low=u_min, high=u_max, shape=(1,))
         self.num_states = 6
         self.num_actions = 1
 
@@ -153,20 +153,28 @@ class CartPole():
         ])
 
         # Discretization
+        self.A_dt = np.eye(4) + self.dt * self.A_ct
+        self.B_dt = self.dt * self.B_ct
         # 使用 cont2discrete 函数将连续时间系统转换为离散时间系统
-        # 只提取 A_discrete 和 B_discrete
-        self.A_dt, self.B_dt, _, _, _ = cont2discrete(
-            (self.A_ct, self.B_ct, np.zeros((self.A_ct.shape[0], self.B_ct.shape[1]))), self.dt
-        )
+        # 定义 C 矩阵为单位矩阵，因为您没有提供输出矩阵
+        # C = np.eye(self.A_ct.shape[0])
+        # # 定义 D 矩阵为零矩阵，因为您没有直接的输入到输出的路径
+        # D = np.zeros((self.A_ct.shape[0], self.B_ct.shape[1]))
+        # # 只提取 A_discrete 和 B_discrete
+        # self.A_dt, self.B_dt, _, _, _ = cont2discrete(
+        #     (self.A_ct, self.B_ct, C, D), self.dt
+        # )
         
         self.A = self.A_ct
         self.B = self.B_ct
         
         # for LQR control
-        # self.P = solve_continuous_are(self.A, self.B, Q, R) 
-        # self.K = (np.linalg.solve(R, self.B.T)) @ self.P
-        self.P = solve_discrete_are(self.A_discrete, self.B_discrete, Q, R) 
-        self.K = (np.linalg.solve(R, self.B_discrete.T)) @ self.P 
+        # 连续
+        # self.P = solve_continuous_are(self.A_ct, self.B_ct, Q, R) 
+        # self.K = (np.linalg.solve(R, self.B_ct.T)) @ self.P
+        # 离散
+        self.P = solve_discrete_are(self.A_dt, self.B_dt, Q, R) 
+        self.K = (np.linalg.solve(R, self.B_dt.T)) @ self.P 
         
         # Safety constraints
         self.x_safe_min = self.x_min
@@ -175,7 +183,7 @@ class CartPole():
         self.theta_safe_max = self.theta_max / 2.0
         
         # 计算MCI
-        self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
+        # self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
         # self.mci_vertices = self.load_mci()
         
         self.reset()
@@ -205,7 +213,7 @@ class CartPole():
             # 将噪声添加到K_tensor上
             K_tensor_noisy = K_tensor + noise
             # 使用带有噪声的K_tensor_noisy
-            action = K_tensor_noisy @ ((x_ref - x))
+            action = K_tensor_noisy @ ((x_ref - x).double())
             
         # 得到的是1*bs的，还需要转置一下成为bs*1的才行
         action_transposed = action.t()  # (bs,1)
@@ -398,7 +406,7 @@ class CartPole():
         self.reset_done_envs()
         u = torch.clamp(u, self.u_min, self.u_max)
         self.u = u
-        self.cumulative_cost += self.cost()
+        # self.cumulative_cost += self.cost()
         self.step_count += 1
 
         # Construct batch of matrices, each being [m_cart + m_pole, m_pole * l * cos(theta); m_pole * L * cos(theta), m_pole * l ^ 2]
@@ -413,7 +421,7 @@ class CartPole():
             self.m_pole * 9.8 * self.l * torch.sin(self.theta),
         ], dim=-1)
         # Solve for [x_ddot; theta_ddot]
-        acc = bsolve(lhs_mat, rhs_vec)
+        acc = bsolve(lhs_mat.double(), rhs_vec)
         # Add noise to acceleration
         acc += self.noise_std * torch.randn(acc.shape, device=self.device, generator=self.rng_process)
         x_ddot = acc[..., 0]
@@ -442,6 +450,6 @@ class CartPole():
 
     def render(self, **kwargs):
         """Renders the environment. Currently, it just prints out state variables and average cost."""
-        ic(self.x, self.x_ref, self.xdot, self.theta, self.theta_dot)
+        ic(self.x, self.x_ref, self.x_dot, self.theta, self.theta_dot)
         avg_cost = (self.cumulative_cost / self.step_count).cpu().numpy()
         ic(avg_cost)
