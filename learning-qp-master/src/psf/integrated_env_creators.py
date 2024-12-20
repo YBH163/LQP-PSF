@@ -42,6 +42,10 @@ class Integrated_env:
         if self.bs==1 and self.train_or_test=="test":
             self.visualize = True
             
+        # 可选的noise值
+        self.noise_values = [0, 0.1, 0.2, 0.3, 0.5, 1, 2, 3, 5]  # 可选的noise值
+        self.noise = 0.3 * torch.ones((self.bs, 1), device=self.device)   # 初始默认值
+        
     def get_noise(self):
         # 创建一个Beta分布，alpha和beta的值可以根据需要调整
         dist = Beta(torch.tensor([1.0]), torch.tensor([10.0]))
@@ -58,9 +62,9 @@ class Integrated_env:
             # ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
             
             # noise = self.get_noise()
-            noise = 0
-            v = (noise * torch.randn((self.bs, 1), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
+            # noise = 0.3
+            v = (self.noise * torch.randn((self.bs, 1), device=self.device))
+            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声
             # ud = v
             ud = ud.clamp(self.env.u_min, self.env.u_max)
             ud = ud.squeeze(-1)
@@ -69,7 +73,7 @@ class Integrated_env:
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
             
             # LQR control
-            noise = 0
+            noise = 1
             v = (noise * torch.randn((self.bs, 1), device=self.device))
             ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
             ud = ud.clamp(self.env.u_min, self.env.u_max)
@@ -87,6 +91,13 @@ class Integrated_env:
             self.ud = init_ud
         combined_obs = torch.cat((init_obs, init_ud.unsqueeze(-1)), dim=-1)
         return combined_obs
+    
+    def reset_done_envs(self, need_reset=None, randomize_seed=None):
+        is_done = self.env.is_done.bool() if need_reset is None else need_reset.bool()
+        # 为结束的环境选择一个新的随机噪声值
+        new_noise = torch.tensor(np.random.choice(self.noise_values, size=int(is_done.sum())), device=self.device)        
+        # 更新self.noise张量中对应结束环境的噪声值
+        self.noise[is_done] = new_noise.unsqueeze(-1)  # 确保维度匹配
     
     def done(self):
         return self.env.done()
@@ -107,7 +118,7 @@ class Integrated_env:
     def reward(self,original_reward, action):
         # safe cost
         original_safe_cost = original_reward
-        coef_safety = -80.0
+        coef_safety = -120.0
         safe_cost = coef_safety * original_safe_cost
         
         # deviation cost
@@ -140,13 +151,15 @@ class Integrated_env:
             return original_safe_cost      # original safe cost
     
     def step(self, action):   
+        self.reset_done_envs()
+        
         # 用ud进行测试时
-        original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
-        reward = self.reward(original_reward, self.ud)
+        # original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
+        # reward = self.reward(original_reward, self.ud)
         
         # 正常测试
-        # original_obs, original_reward, done, info = self.env.step(action)   
-        # reward = self.reward(original_reward, action)
+        original_obs, original_reward, done, info = self.env.step(action)   
+        reward = self.reward(original_reward, action)
         
         # 可视化
         if self.visualize:

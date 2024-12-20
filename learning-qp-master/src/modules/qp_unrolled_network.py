@@ -49,7 +49,7 @@ class QPUnrolledNetwork(nn.Module):
     where x in R^n, b in R^m.
     """
     def __init__(
-        self, device, input_size, n_qp, m_qp, qp_iter, mlp_builder,
+        self, device, input_size, n_qp, m_qp, qp_iter, mlp_builder, env_name,
         shared_PH=False,
         affine_qb=False,
         strict_affine_layer=False,
@@ -124,6 +124,8 @@ class QPUnrolledNetwork(nn.Module):
         self.n_b_param = m_qp if not self.no_b else 0
 
         self.n_mlp_output = 0
+        
+        self.env_name = env_name
         if not self.shared_PH:
             self.n_mlp_output += (self.n_P_param + self.n_H_param)
             self.P_params = None
@@ -138,9 +140,9 @@ class QPUnrolledNetwork(nn.Module):
         else:
             if not self.strict_affine_layer:
                 # only input x0(states) for computing b (just for double integrator)
-                self.qb_affine_layer = nn.Linear(input_size-3, self.n_b_param, bias=not self.symmetric).to(self.device)
+                self.qb_affine_layer = nn.Linear(input_size, self.n_b_param, bias=not self.symmetric).to(self.device)
             else:
-                self.qb_affine_layer = StrictAffineLayer(input_size-3, self.n_qp, self.m_qp, self.obs_has_half_ref).to(self.device)
+                self.qb_affine_layer = StrictAffineLayer(input_size, self.n_qp, self.m_qp, self.obs_has_half_ref).to(self.device)
 
         if self.n_mlp_output > 0:
             self.mlp = mlp_builder(input_size, self.n_mlp_output)
@@ -251,9 +253,15 @@ class QPUnrolledNetwork(nn.Module):
         bs = x.shape[0]
         
         # comppute MCI Fx ≥ g
-        # mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_min"], self.mpc_baseline["states_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=6)
-        # if mci_vertices.size > 0:
-        #     F, g = construct_polyhedron_from_mci(mci_vertices)
+        if self.env_name == "double_integrator":
+            mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_safe_min"], self.mpc_baseline["states_safe_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=6)
+            if mci_vertices.size > 0:
+                F, g = construct_polyhedron_from_mci(mci_vertices)
+            else:
+                F, g = None
+        elif self.env_name == "cartpole":
+            F = self.mpc_baseline["F"]
+            g = self.mpc_baseline["g"]
             
         # Conversions between torch and np
         t = lambda a: torch.tensor(a, device=x.device)
@@ -279,8 +287,8 @@ class QPUnrolledNetwork(nn.Module):
                 xref,
                 normalize=self.mpc_baseline.get("normalize", False),
                 Qf=self.mpc_baseline.get("terminal_coef", 0.) * t(np.eye(self.mpc_baseline["n_mpc"])) if self.mpc_baseline.get("Qf", None) is None else t(self.mpc_baseline["Qf"]),
-                # F = F,
-                # g = g,
+                F = F,
+                g = g,
             )
             if not use_osqp_oracle:
                 solver = QPSolver(x.device, n, m, P=P, H=H)
@@ -390,7 +398,7 @@ class QPUnrolledNetwork(nn.Module):
     def forward(self, x, return_problem_params=False, info=None):
         # 确保输入 x 是 Float 类型
         x = x.double()      # 如果用float64的话
-        x0 = x[:, :2]       # only work for double integrator
+        x0 = x[:, :-1]       # only work for double integrator
         bs = x.shape[0]
         if info is not None:
             self.env_info = info
@@ -428,7 +436,7 @@ class QPUnrolledNetwork(nn.Module):
                 Pinv, H = None, None
 
             # Compute b, q            
-            b = self.get_b(x0, mlp_out)
+            b = self.get_b(x, mlp_out)
             
             # 获取 x 的最后一个数据，并增加新的维度，生成形状为 (batch_size, 1) 的张量
             ud = x[:, -1].unsqueeze(-1)

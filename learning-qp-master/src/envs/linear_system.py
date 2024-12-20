@@ -169,7 +169,7 @@ class LinearSystem():
         # self.mci_vertices = compute_MCI(self.A_discrete, self.B_discrete, x_safe_min, x_safe_max, u_min, u_max, iterations=20)
         self.mci_vertices = self.load_mci()
     
-    def load_mci(self, filename='mci.pkl'):
+    def load_mci(self, filename='double_integrator_mci.pkl'):
         with open(filename, 'rb') as f:
             return pickle.load(f)
     

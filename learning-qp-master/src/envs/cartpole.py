@@ -177,8 +177,8 @@ class CartPole():
         self.K = (np.linalg.solve(R, self.B_dt.T)) @ self.P 
         
         # Safety constraints
-        self.x_safe_min = self.x_min
-        self.x_safe_max = self.x_max
+        self.x_safe_min = self.x_min + 0.2
+        self.x_safe_max = self.x_max - 0.2
         self.theta_safe_min = self.theta_min / 2.0
         self.theta_safe_max = self.theta_max / 2.0
         
@@ -291,7 +291,7 @@ class CartPole():
 
     def generate_ref(self, size):
         """Generates and returns reference positions of given size."""
-        x_ref = self.x_min + (self.x_max - self.x_min) * torch.rand((size,), device=self.device, generator=self.rng_initial)
+        x_ref = self.x_safe_min + (self.x_safe_max - self.x_safe_min) * torch.rand((size,), device=self.device, generator=self.rng_initial)
         return x_ref
 
     def generate_initial(self, size):

@@ -28,7 +28,7 @@ def backward_reachable_set_linear(A_inv, B, X_set, x_min, x_max, u_min, u_max):
             Bu = np.dot(B, u)
             prev_x = np.dot(A_inv, x.reshape(-1, 1) - Bu.reshape(-1, 1))
             # prev_x = np.dot(A_inv, x - Bu)
-            if np.all(x_min <= prev_x) and np.all(prev_x <= x_max):
+            if np.all(x_min <= prev_x.squeeze()) and np.all(prev_x.squeeze() <= x_max):
                 new_set.add(tuple(prev_x.flatten()))
                 # new_set.add(tuple(prev_x))
     return new_set
@@ -129,7 +129,7 @@ def compute_positive_invariant_set_from_origin(g, x_min, x_max, initial_radius=1
     return current_set_hull.points[current_set_hull.vertices, :]
 
 
-def compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10):
+def compute_MCI(A, B, x_min, x_max, u_min, u_max, env_name, iterations=10):
     """
     Compute the Maximal Control Invariant (MCI) set for a given linear system x[k+1] = Ax[k] + Bu[k].
 
@@ -150,7 +150,10 @@ def compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10):
     A_inv = np.linalg.inv(A)
 
     # Initialize the MCI set as a single point at the origin, using a set for uniqueness
-    MCI_set = {(0, 0)}
+    if env_name == "double_integrator":
+        MCI_set = {(0, 0)}
+    elif env_name == "cartpole":
+        MCI_set = {(0, 0, 0, 0)}
 
     # Iteratively compute the MCI set
     for _ in range(iterations):
@@ -167,24 +170,46 @@ def compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=10):
     else:
         return np.array([])
 
-# 假设MCI集合是二维的，并且顶点是循环连接的    
-def construct_polyhedron_from_mci(mci_vertices):
+# 假设MCI集合顶点是循环连接的    
+def construct_polyhedron_from_mci(mci_vertices, env_name):
     F = []  # 存储不等式的系数
     g = []  # 存储不等式的常数项
 
     for i in range(len(mci_vertices)):
-        # 找到相邻的顶点
-        current_vertex = mci_vertices[i]
-        next_vertex = mci_vertices[(i + 1) % len(mci_vertices)]
+        if env_name == "double_integrator":
+            # 找到相邻的顶点
+            current_vertex = mci_vertices[i]
+            next_vertex = mci_vertices[(i + 1) % len(mci_vertices)]
 
-        # 计算从当前顶点到下一个顶点的向量
-        edge_vector = next_vertex - current_vertex
+            # 计算从当前顶点到下一个顶点的向量
+            edge_vector = next_vertex - current_vertex
 
-        # 计算法向量，确保它指向多边形内部
-        normal_vector = np.array([edge_vector[1], -edge_vector[0]])
+            # 计算法向量，确保它指向多边形内部
+            normal_vector = np.array([edge_vector[1], -edge_vector[0]])
 
-        # 计算偏移量
-        bias = -np.dot(normal_vector, current_vertex)
+            # 计算偏移量
+            bias = -np.dot(normal_vector, current_vertex)
+        elif env_name == "cartpole":
+            if len(mci_vertices) < 4:
+                raise ValueError("At least four vertices are required to define a hyperplane in 4D space.")
+            points = [mci_vertices[i], mci_vertices[(i + 1) % len(mci_vertices)], mci_vertices[(i + 2) % len(mci_vertices)], mci_vertices[(i + 3) % len(mci_vertices)]]
+            # current_vertex = mci_vertices[i]
+            # next_vertex1 = mci_vertices[(i + 1) % len(mci_vertices)]
+            # next_vertex2 = mci_vertices[(i + 2) % len(mci_vertices)]
+            # next_vertex3 = mci_vertices[(i + 3) % len(mci_vertices)]
+            
+            # 指定单位偏移量
+            bias = np.array([1, 1, 1, 1])
+            # 将点列表转换为4x4的NumPy数组
+            points_matrix = np.array(points)
+            # 检查矩阵是否奇异
+            if np.linalg.matrix_rank(points_matrix) < 4:
+                continue  # 如果矩阵是奇异的，跳过当前循环迭代
+            else:
+                normal_vector = np.linalg.solve(points_matrix, bias)
+            
+            if np.linalg.norm(normal_vector) == 0:
+                raise ValueError("The selected points are coplanar and do not define a unique hyperplane.")
 
         # 构建不等式
         F.append(normal_vector)
@@ -223,25 +248,51 @@ def save_mci(mci_vertices, filename='mci.pkl'):
         pickle.dump(mci_vertices, f)
 
 def main():
-    # 定义双积分系统的动态矩阵 A 和输入矩阵 B
-    A = np.array([[1, 0.1], [0., 1.]])
-    B = np.array([[0.005], [0.1]])
-
-    # 定义状态和控制输入的约束
-    x_min = np.array([-0.5, -0.5])
-    x_max = np.array([0.5, 0.5])
-    u_min = -0.5
-    u_max = 0.5
+    env_name = "cartpole"
+    
+    if env_name == "double_integrator":
+        # 定义双积分系统的动态矩阵 A 和输入矩阵 B
+        A = np.array([[1, 0.1], [0., 1.]])
+        B = np.array([[0.005], [0.1]])
+        # 定义状态和控制输入的约束
+        x_min = np.array([-0.5, -0.5])
+        x_max = np.array([0.5, 0.5])
+        u_min = -0.5
+        u_max = 0.5
+    elif env_name == "cartpole":
+        # cartpole
+        A = np.array([
+                [1., 0.1, 0., 0.],
+                [0., 1, -0.098, 0.],
+                [0., 0., 1., 0.1],
+                [0., 0., 1.96 , 1.],
+            ])
+        B = np.array([
+                [0.],
+                [0.1],
+                [0.],
+                [-0.18181818],
+            ])
+        x_min = np.array([-2, -1000, -0.5, -1000])
+        x_max = np.array([2, 1000, 0.5, 1000])
+        u_min = -10
+        u_max = 10
+    
     # 计算 MCI 集合
-    mci_vertices = compute_MCI(A, B, x_min, x_max, u_min, u_max, iterations=20)
-    # save_mci(mci_vertices)
+    mci_vertices = compute_MCI(A, B, x_min, x_max, u_min, u_max,env_name, iterations=10)
+    save_mci(mci_vertices, filename='cartpole_mci.pkl')
     
     # 可视化生成的多面体
     if mci_vertices.size > 0:
-        F, g = construct_polyhedron_from_mci(mci_vertices)
-        plot_halfspaces(F, g, mci_vertices)
-        plt.savefig('Polyhedron.png')
-        plt.close()
+        F, g = construct_polyhedron_from_mci(mci_vertices, env_name)
+        print(F)
+        print(g)
+        # 序列化 F 和 g 并保存到文件
+        with open('F_g_values.pkl', 'wb') as f:
+            pickle.dump((F, g), f)
+        # plot_halfspaces(F, g, mci_vertices)
+        # plt.savefig('Polyhedron.png')
+        # plt.close()
         
     # 可视化 MCI 集合
     # plt.figure(figsize=(8, 8))

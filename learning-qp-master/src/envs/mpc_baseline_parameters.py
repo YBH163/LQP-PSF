@@ -55,6 +55,21 @@ def get_mpc_baseline_parameters(env_name, N, noise_std=0.):
 
         mpc_parameters["A"] = A
         mpc_parameters["B"] = B
+        
+        F = np.array([
+            [1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 1., 0.],
+            [0., 0., 0., 1.],
+            [-1., 0., 0., 0.],
+            [0., -1., 0., 0.],
+            [0., 0., -1., 0.],
+            [0., 0., 0., -1.]
+        ])
+        # g = np.array([-1.8, -1, -0.1, -0.1, -1.8, -1, -0.1, -0.1])
+        g = np.array([-1.8, -3, -0.1, -3, -1.8, -3, -0.1, -3])
+        mpc_parameters["F"] = F
+        mpc_parameters["g"] = g
 
         # Compute state and ref from obs: obs is in format (x, x_dot, theta, theta_dot, x_ref, ud)
         def obs_to_state_and_ref(obs):

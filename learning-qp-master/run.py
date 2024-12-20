@@ -182,6 +182,7 @@ if args.qp_unrolled:
         "feasible_lambda": 10.,
         "train_or_test": args.train_or_test,
         "run_name": args.run_name,
+        "env_name": args.env
     }
 
 if args.mpc_baseline_N:

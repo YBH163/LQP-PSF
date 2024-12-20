@@ -68,7 +68,8 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     Ax0 = torch.cat([bmv((torch.linalg.matrix_power(A, k + 1)).unsqueeze(0), x0) for k in range(N)], 1)   # (bs, N * n_sys)
     m_original = 2 * (n_sys + m_sys) * N   # number of constraints
     n_original = m_sys * N                 # number of decision variables
-    if (F != None) and (g != None):
+    # if (F.any() != None) and (g.any() != None):
+    if (F is not None) and (g is not None):
         xN_constraints = g.shape[0]
         m = m_original + xN_constraints
         n = n_original
@@ -96,14 +97,15 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
         -u_min * torch.ones((bs, n_original), device=device),
     ], 1)
     
-    if (F != None) and (g != None):
+    # if (F.any() != None) and (g.any() != None):
+    if (F is not None) and (g is not None):
         g_tensor = torch.from_numpy(g).to(device)  # 注意负号！
         # 然后，重复 g_tensor 以匹配 b 的批次大小
         g_repeated = g_tensor.repeat(b.shape[0], 1)
         ANx0 = bmv((torch.linalg.matrix_power(A, N)).unsqueeze(0), x0)
         
         # 首先，将 F 转换为 PyTorch 张量
-        F_tensor = torch.from_numpy(F).float().to(device)
+        F_tensor = torch.from_numpy(F).to(device)
         # 第一个参数是批次大小，第二个参数是1，意味着在列方向上不重复
         F_repeated = F_tensor.unsqueeze(0).repeat(b.shape[0], 1, 1)
         # 最后，沿着列的方向（dim=1）追加 g_repeated 到 b
@@ -119,7 +121,8 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     # H = torch.cat([XU, -XU, torch.eye(n_original, device=device), -torch.eye(n_original, device=device)], 0)  # (m, n)
     H = torch.cat([-XU, XU, -torch.eye(n_original, device=device), torch.eye(n_original, device=device)], 0)  # (m, n)
  
-    if (F != None) and (g != None):
+    # if (F.any() != None) and (g.any() != None):
+    if (F is not None) and (g is not None):
         # FAB = (torch.cat([(F@ torch.linalg.matrix_power(A, N-1-k) @B for k in range(N)) ], 1))
         # 使用 list() 将生成器转换为列表
         FAB_list = [F_tensor @ torch.linalg.matrix_power(A, N-1-k) @ B for k in range(N)]
