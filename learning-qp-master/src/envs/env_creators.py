@@ -181,11 +181,12 @@ env_creators = {
         x_max=sys_param["cartpole"]["x_max"],
         u_min=sys_param["cartpole"]["u_min"],
         u_max=sys_param["cartpole"]["u_max"],
-        bs=kwargs["bs"],
+        # bs=kwargs["bs"],
         barrier_thresh=0.1,
-        max_steps=kwargs["max_steps"],
-        keep_stats=kwargs["keep_stats"],
-        run_name=kwargs["run_name"],
-        exp_name=kwargs["exp_name"],
+        # max_steps=kwargs["max_steps"],
+        # keep_stats=kwargs["keep_stats"],
+        # run_name=kwargs["run_name"],
+        # exp_name=kwargs["exp_name"],
+        **kwargs
     ),
 }

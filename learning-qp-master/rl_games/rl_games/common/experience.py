@@ -325,6 +325,7 @@ class ExperienceBuffer:
             self._init_from_aux_dict(self.aux_tensor_dict)
 
     def _init_from_env_info(self, env_info):
+        type = env_info['action_space'].dtype
         obs_base_shape = self.obs_base_shape
         state_base_shape = self.state_base_shape
 
@@ -332,24 +333,24 @@ class ExperienceBuffer:
         if self.has_central_value:
             self.tensor_dict['states'] = self._create_tensor_from_space(env_info['state_space'], state_base_shape)
         
-        val_space = gym.spaces.Box(low=0, high=1,shape=(env_info.get('value_size',1),))
+        val_space = gym.spaces.Box(low=0, high=1,shape=(env_info.get('value_size',1),), dtype=type)
         self.tensor_dict['rewards'] = self._create_tensor_from_space(val_space, obs_base_shape)
         self.tensor_dict['values'] = self._create_tensor_from_space(val_space, obs_base_shape)
-        self.tensor_dict['neglogpacs'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=(), dtype=np.float32), obs_base_shape)
+        self.tensor_dict['neglogpacs'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=(), dtype=type), obs_base_shape)
         self.tensor_dict['dones'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=(), dtype=np.uint8), obs_base_shape)
         if self.is_discrete or self.is_multi_discrete:
             self.tensor_dict['actions'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=np.long), obs_base_shape)
         if self.use_action_masks:
             self.tensor_dict['action_masks'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape + (np.sum(self.actions_num),), dtype=np.bool), obs_base_shape)
         if self.is_continuous:
-            self.tensor_dict['actions'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=np.float32), obs_base_shape)
-            self.tensor_dict['mus'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=np.float32), obs_base_shape)
-            self.tensor_dict['sigmas'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=np.float32), obs_base_shape)
+            self.tensor_dict['actions'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=type), obs_base_shape)
+            self.tensor_dict['mus'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=type), obs_base_shape)
+            self.tensor_dict['sigmas'] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=self.actions_shape, dtype=type), obs_base_shape)
 
     def _init_from_aux_dict(self, tensor_dict):
         obs_base_shape = self.obs_base_shape
         for k,v in tensor_dict.items():
-            self.tensor_dict[k] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=(v), dtype=np.float32), obs_base_shape)
+            self.tensor_dict[k] = self._create_tensor_from_space(gym.spaces.Box(low=0, high=1,shape=(v), dtype=type), obs_base_shape)
 
     def _create_tensor_from_space(self, space, base_shape):       
         if type(space) is gym.spaces.Box:

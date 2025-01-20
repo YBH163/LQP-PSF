@@ -398,7 +398,7 @@ class QPUnrolledNetwork(nn.Module):
     def forward(self, x, return_problem_params=False, info=None):
         # 确保输入 x 是 Float 类型
         x = x.double()      # 如果用float64的话
-        x0 = x[:, :-1]       # only work for double integrator
+        x0 = x[:, :2]       # only work for double integrator
         bs = x.shape[0]
         if info is not None:
             self.env_info = info

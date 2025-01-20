@@ -115,9 +115,9 @@ class CartPole():
         self.cumulative_cost = torch.zeros((bs,), device=device)
 
         # Gym environment settings
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,))
+        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype = np.float64)
         self.state_space = self.observation_space
-        self.action_space = gym.spaces.Box(low=u_min, high=u_max, shape=(1,))
+        self.action_space = gym.spaces.Box(low=u_min, high=u_max, shape=(1,), dtype = np.float64)
         self.num_states = 6
         self.num_actions = 1
 
@@ -270,6 +270,7 @@ class CartPole():
         # safe_cost = int(self.x < self.x_safe_min or self.x > self.x_safe_max or self.theta < self.theta_safe_min or self.theta > self.theta_safe_max)
         safe_cost = ((self.x < self.x_safe_min) | (self.x > self.x_safe_max) | (self.theta < self.theta_safe_min) | (self.theta > self.theta_safe_max)).int()
         self.info_dict["safe_cost"] =safe_cost
+        self.info_dict["actual_costs"] = safe_cost
         return safe_cost
 
     def done(self):
@@ -291,7 +292,8 @@ class CartPole():
 
     def generate_ref(self, size):
         """Generates and returns reference positions of given size."""
-        x_ref = self.x_safe_min + (self.x_safe_max - self.x_safe_min) * torch.rand((size,), device=self.device, generator=self.rng_initial)
+        # x_ref = self.x_safe_min + (self.x_safe_max - self.x_safe_min) * torch.rand((size,), device=self.device, generator=self.rng_initial)
+        x_ref =  torch.zeros((size,), device=self.device)   # zero reference
         return x_ref
 
     def generate_initial(self, size):
