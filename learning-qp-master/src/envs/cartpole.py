@@ -62,6 +62,9 @@ class CartPole():
         self.rng_process = get_rng(device, random_seed)
         self.rng_dynamics = get_rng(device, random_seed)
 
+        self.n = 4
+        self.m = 1
+        
         # Unpack parameters
         self.dt = parameters["dt"]
         self.m_pole_min = parameters["m_pole"][0]

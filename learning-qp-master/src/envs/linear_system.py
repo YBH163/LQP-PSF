@@ -18,8 +18,8 @@ import pickle
 class LinearSystem():
     def __init__(
         self, A, B, Q, R, sqrt_W,
-        x_min, x_max, u_min, u_max, bs, barrier_thresh,
-        max_steps,
+        x_min, x_max, u_min, u_max, bs, barrier_thresh, x_safe_min, x_safe_max,
+        max_steps, env_name_,
         u_eq_min=None, u_eq_max=None,
         skip_to_steady_state=False,
         stabilization_only=False,
@@ -64,6 +64,7 @@ class LinearSystem():
             ref_generator (function, optional): Function that generates reference states.
             randomizer (function, optional): Function that randomizes the system dynamics (returns \Delta A, \Delta B).
         '''
+        self.env_name = env_name_
         # Random seed and random number generators for different components
         if random_seed is not None:
             torch.manual_seed(random_seed)
@@ -89,21 +90,29 @@ class LinearSystem():
         self.A0 = self.A
         self.B0 = self.B
         
-        self.dt = 0.1
-        # 定义连续时间系统的参数
-        self.A_continuous = A
-        self.B_continuous = B
-        C_continuous = np.array([[1, 0]])  # 虽然不需要，但函数需要这个参数
-        D_continuous = np.array([[0]])  # 虽然不需要，但函数需要这个参数
-        # 使用 cont2discrete 函数将连续时间系统转换为离散时间系统
-        # 只提取 A_discrete 和 B_discrete
-        self.A_discrete, self.B_discrete, _, _, _ = cont2discrete(
-            (self.A_continuous, self.B_continuous, C_continuous, D_continuous), self.dt
-        )
-        self.A = t(self.A_discrete)
-        self.B = t(self.B_discrete)
-        self.A0 = self.A
-        self.B0 = self.B
+        if self.env_name == "double_integrator":
+            self.dt = 0.1
+            # 定义连续时间系统的参数
+            self.A_continuous = A
+            self.B_continuous = B
+            C_continuous = np.array([[1, 0]])  # 虽然不需要，但函数需要这个参数
+            D_continuous = np.array([[0]])  # 虽然不需要，但函数需要这个参数
+            # 使用 cont2discrete 函数将连续时间系统转换为离散时间系统
+            # 只提取 A_discrete 和 B_discrete
+            self.A_discrete, self.B_discrete, _, _, _ = cont2discrete(
+                (self.A_continuous, self.B_continuous, C_continuous, D_continuous), self.dt
+            )
+            self.A = t(self.A_discrete)
+            self.B = t(self.B_discrete)
+            self.A0 = self.A
+            self.B0 = self.B
+        else:
+            self.A_discrete = A
+            self.B_discrete = B
+            self.A = t(self.A_discrete)
+            self.B = t(self.B_discrete)
+            self.A0 = self.A
+            self.B0 = self.B
         
         self.randomizer = randomizer
         self.reward_shaping_parameters = reward_shaping_parameters
@@ -124,8 +133,8 @@ class LinearSystem():
         self.stabilization_only = stabilization_only
         self.num_states = self.n if stabilization_only else 2 * self.n
         self.num_actions = self.m
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.num_states,))
-        self.action_space = gym.spaces.Box(low=u_min, high=u_max, shape=(self.num_actions,))
+        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.num_states,), dtype = np.float64)
+        self.action_space = gym.spaces.Box(low=u_min, high=u_max, shape=(self.num_actions,), dtype = np.float64)
         self.state_space = self.observation_space
         self.x = 0.5 * (self.x_max + self.x_min) * torch.ones((bs, self.n), device=device)
         self.x0 = 0.5 * (self.x_max + self.x_min) * torch.ones((bs, self.n), device=device)
@@ -139,7 +148,7 @@ class LinearSystem():
         self.run_name = run_name
         self.keep_stats = keep_stats
         self.already_on_stats = torch.zeros((bs,), dtype=torch.uint8, device=device)   # Each worker can only contribute once to the statistics, to avoid bias towards shorter episodes
-        self.stats = pd.DataFrame(columns=['i', 'x0', 'x_ref', 'A', 'B', 'w0', 'episode_length', 'cumulative_cost', 'constraint_violated'])
+        self.stats = pd.DataFrame(columns=['i', 'x0', 'x_ref', 'A', 'B', 'w0', 'episode_length', 'cumulative_safe_cost', 'constraint_violated'])
         self.quiet = quiet
                 
         if skip_to_steady_state:
@@ -154,11 +163,17 @@ class LinearSystem():
         self.ref_generator = ref_generator
         
         # for safe constraints
-        x_safe_min = -0.5
-        x_safe_max = 0.5
-        self.x_safe_min = t(-0.5)
-        self.x_safe_max = t(0.5)
-        
+        self.x_safe_min = t(x_safe_min)
+        self.x_safe_max = t(x_safe_max)
+        # if self.env_name == "double_integrator":
+        #     x_safe_min = -0.5
+        #     x_safe_max = 0.5
+        #     self.x_safe_min = t(-0.5)
+        #     self.x_safe_max = t(0.5)
+        # elif self.env_name == "double_integrator":
+        #     self.x_safe_min = t(-0.5)
+        #     self.x_safe_max = t(0.5)
+            
         # for LQR control        
         # self.P = solve_continuous_are(A, B, Q, R) 
         # self.K = (np.linalg.solve(R, B.T)) @ self.P 
@@ -402,23 +417,24 @@ class LinearSystem():
         w0 = self.w0[i, :].cpu().numpy()
 
         episode_length = self.step_count[i].item()
-        cumulative_cost = self.cum_cost[i].item()
+        cumulative_safe_cost = self.cum_cost[i].item()
         constraint_violated = (self.is_done[i] == 1).item()
-        self.stats.loc[len(self.stats)] = [i.item(), x0, x_ref, A, B, w0, episode_length, cumulative_cost, constraint_violated]
+        self.stats.loc[len(self.stats)] = [i.item(), x0, x_ref, A, B, w0, episode_length, cumulative_safe_cost, constraint_violated]
 
     def dump_stats(self, filename=None):
         """
         Writes the accumulated statistics to a CSV file.
         """
-        if filename is None:
-            directory = 'test_results'
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            tag = self.run_name
-            filename = os.path.join(directory, f"{tag}_{timestamp}.csv")
-        self.stats = self.stats.sort_values(by='i')
-        self.stats.to_csv(filename, index=False)
+        # if filename is None:
+        #     directory = 'test_results'
+        #     if not os.path.exists(directory):
+        #         os.makedirs(directory)
+        #     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        #     tag = self.run_name
+        #     filename = os.path.join(directory, f"{tag}_{timestamp}.csv")
+        # self.stats = self.stats.sort_values(by='i')
+        # self.stats.to_csv(filename, index=False)
+        return self.stats
 
     def step(self, u):
         """
@@ -428,6 +444,7 @@ class LinearSystem():
         u = u.clamp(self.u_min, self.u_max)
         self.u = u
         # self.cum_cost += self.cost(self.x - self.x_ref, u)
+        self.cum_cost += self.safe_cost()
         w = bmv(self.sqrt_W, torch.randn((self.bs, self.n), generator=self.rng_process, device=self.device))
         # w = w.float()
         self.w0[self.step_count == 0, :] = w[self.step_count == 0, :]

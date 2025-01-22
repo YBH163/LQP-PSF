@@ -27,6 +27,8 @@ sys_param = {
         "R": np.array([[100.0]]),
         "x_min": -5.,
         "x_max": 5.,
+        "x_safe_min": -0.5,
+        "x_safe_max": 0.5,
         "u_min": -0.5,
         "u_max": 0.5,
         "states_min": np.array([[-5], [-5]]),
@@ -50,12 +52,18 @@ sys_param = {
             [0.0,         0.468317],
             [0.307042,    0.0],
         ]),
-        "Q": np.eye(4),
-        "R": 0.1 * np.eye(2),
+        "Q": 1 * np.eye(4),
+        "R": 100 * np.eye(2),
         "x_min": 0,
-        "x_max": 20,
+        "x_max": 22,
+        "x_safe_min": 0,
+        "x_safe_max": 20,
         "u_min": 0,
         "u_max": 8,
+        "states_min": np.array([[0], [0], [0], [0]]),
+        "states_max": np.array([[22], [22], [22], [22]]),
+        "states_safe_min": np.array([[0], [0], [0], [0]]),
+        "states_safe_max": np.array([[20], [20], [20], [20]]),
     },
     "cartpole": {
         "n": 4,
@@ -120,7 +128,7 @@ def tank_randomizer(size, device, rng):
 
     multiplier_B1 = 0.02 * (2. * torch.rand((size,), generator=rng, device=device) - 1.)   # Voltage perturbation on pump 1
     multiplier_B2 = 0.02 * (2. * torch.rand((size,), generator=rng, device=device) - 1.)   # Voltage perturbation on pump 2
-    B = torch.tensor(sys_param["tank"]["B"], device=device, dtype=torch.float).unsqueeze(0)
+    B = torch.tensor(sys_param["tank"]["B"], device=device).unsqueeze(0)
     Delta_B1 = multiplier_B1.unsqueeze(-1) * B[:, :, 0]
     Delta_B2 = multiplier_B2.unsqueeze(-1) * B[:, :, 1]
     Delta_B = torch.stack([Delta_B1, Delta_B2], dim=2)
@@ -137,6 +145,8 @@ env_creators = {
         sqrt_W=kwargs["noise_level"] * np.eye(2),
         x_min=sys_param["double_integrator"]["x_min"] * np.ones(2),
         x_max=sys_param["double_integrator"]["x_max"] * np.ones(2),
+        x_safe_min=sys_param["double_integrator"]["x_safe_min"],
+        x_safe_max=sys_param["double_integrator"]["x_safe_max"],
         u_min=sys_param["double_integrator"]["u_min"] * np.ones(1),
         u_max=sys_param["double_integrator"]["u_max"] * np.ones(1),
         barrier_thresh=1,
@@ -152,6 +162,8 @@ env_creators = {
         sqrt_W=kwargs["noise_level"] * np.eye(4),
         x_min=sys_param["tank"]["x_min"] * np.ones(4),
         x_max=sys_param["tank"]["x_max"] * np.ones(4),
+        x_safe_min=sys_param["tank"]["x_safe_min"],
+        x_safe_max=sys_param["tank"]["x_safe_max"],
         u_min=sys_param["tank"]["u_min"] * np.ones(2),
         u_max=sys_param["tank"]["u_max"] * np.ones(2) if not kwargs.get("skip_to_steady_state", False) else 1.0 * np.ones(2),
         barrier_thresh=1.,

@@ -114,6 +114,7 @@ default_env_config = {
     "skip_to_steady_state": args.skip_to_steady_state,
     "reward_shaping": args.reward_shaping,
     "train_or_test": args.train_or_test,
+    "env_name_": args.env,
 }
 
 blacklist_keys = lambda d, blacklist: {k: d[k] for k in d if not (k in blacklist)}

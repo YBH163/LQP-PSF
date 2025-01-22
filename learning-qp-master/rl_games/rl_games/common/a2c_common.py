@@ -668,7 +668,7 @@ class A2CBase(BaseAlgorithm):
 
             shaped_rewards = self.rewards_shaper(rewards)
             if self.value_bootstrap and 'time_outs' in infos:
-                shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1).float()
+                shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1)
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
 
@@ -1063,8 +1063,8 @@ class ContinuousA2CBase(A2CBase):
         self.clip_actions = self.config.get('clip_actions', True)
 
         # todo introduce device instead of cuda()
-        self.actions_low = torch.from_numpy(action_space.low.copy()).float().to(self.ppo_device)
-        self.actions_high = torch.from_numpy(action_space.high.copy()).float().to(self.ppo_device)
+        self.actions_low = torch.from_numpy(action_space.low.copy()).to(self.ppo_device)
+        self.actions_high = torch.from_numpy(action_space.high.copy()).to(self.ppo_device)
 
     def preprocess_actions(self, actions):
         if self.clip_actions:
