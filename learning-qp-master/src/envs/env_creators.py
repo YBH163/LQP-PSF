@@ -104,7 +104,7 @@ def tank_ref_generator(size, device, rng):
     Generate reference states for the tank environment.
     Sampled across the entire state space.
     """
-    x_ref = 20. * torch.rand((size, 4), generator=rng, device=device)
+    x_ref = 19. * torch.rand((size, 4), generator=rng, device=device)
     return x_ref
 
 def tank_randomizer(size, device, rng):

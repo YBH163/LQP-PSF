@@ -63,9 +63,11 @@ class Integrated_env:
             self.noise = 1 * torch.ones((self.bs, self.m), device=self.device)   # 初始默认值
         
         self.stats = pd.DataFrame(columns=['i', 'cumulative_deviation'])
-        self.cum_deviation = torch.zeros((self.bs,), dtype=torch.float, device=self.device)
+        self.cum_deviation = torch.zeros((self.bs,), device=self.device)
         self.already_on_stats = torch.zeros((self.bs,), dtype=torch.uint8, device=self.device)   # Each worker can only contribute once to the statistics, to avoid bias towards shorter episodes
         self.run_name = self.env.run_name
+        self.step_count = self.env.step_count
+        self.ud = torch.zeros((self.bs, self.m), device=self.device)
         
     # def get_noise(self):
     #     # 创建一个Beta分布，alpha和beta的值可以根据需要调整
@@ -92,12 +94,13 @@ class Integrated_env:
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
+            ud = torch.where(self.step_count <= 50, torch.full_like(self.ud, 3),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 10
-            v = (noise * torch.randn((self.bs, self.m), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
-            ud = ud.clamp(self.env.u_min, self.env.u_max)
+            # noise = 0.1
+            # v = (noise * torch.randn((self.bs, self.m), device=self.device))
+            # ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
+            # ud = ud.clamp(self.env.u_min, self.env.u_max)
             # ud = ud.squeeze(-1)
 
         self.ud = ud
@@ -204,12 +207,14 @@ class Integrated_env:
         self.reset_done_envs()
         
         # 用ud进行测试时
-        # original_obs, original_reward, done, info = self.env.step(self.ud.unsqueeze(-1))   
+        # original_obs, original_reward, done, info = self.env.step(self.ud)   
         # reward = self.reward(original_reward, self.ud)
         
         # 正常测试
         original_obs, original_reward, done, info = self.env.step(action)   
         reward = self.reward(original_reward, action)
+        
+        self.step_count = self.env.step_count
         
         if self.env.keep_stats:
             done_indices = torch.nonzero(self.env.is_done.to(dtype=torch.bool) & torch.logical_not(self.already_on_stats), as_tuple=False)
@@ -300,7 +305,7 @@ class Integrated_env:
 
         plt.tight_layout()
         plt.show()
-        plt.savefig("mlp_trajectory.png")  # 保存图表
+        plt.savefig("psf_trajectory.png")  # 保存图表
         plt.close()
 
 integrated_env_creators = {

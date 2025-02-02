@@ -259,9 +259,12 @@ class QPUnrolledNetwork(nn.Module):
                 F, g = construct_polyhedron_from_mci(mci_vertices)
             else:
                 F, g = None
-        elif self.env_name == "cartpole":
+        # elif self.env_name == "cartpole":
+        else:
             F = self.mpc_baseline["F"]
             g = self.mpc_baseline["g"]
+        # elif self.env_name == "tank":
+            # F, g = None
             
         # Conversions between torch and np
         t = lambda a: torch.tensor(a, device=x.device)
@@ -287,8 +290,8 @@ class QPUnrolledNetwork(nn.Module):
                 xref,
                 normalize=self.mpc_baseline.get("normalize", False),
                 Qf=self.mpc_baseline.get("terminal_coef", 0.) * t(np.eye(self.mpc_baseline["n_mpc"])) if self.mpc_baseline.get("Qf", None) is None else t(self.mpc_baseline["Qf"]),
-                F = F,
-                g = g,
+                F = None,
+                g = None,
             )
             if not use_osqp_oracle:
                 solver = QPSolver(x.device, n, m, P=P, H=H)

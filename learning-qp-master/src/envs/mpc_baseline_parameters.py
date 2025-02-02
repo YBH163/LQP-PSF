@@ -9,24 +9,54 @@ def get_mpc_baseline_parameters(env_name, N, noise_std=0.):
         "N": N,
         **sys_param[env_name],
     }
-    if env_name == "tank":
-        # Compute state and ref from obs: the first n entries of obs is state, and the latter n entries are ref
-        mpc_parameters["obs_to_state_and_ref"] = lambda obs: (obs[:, :mpc_parameters["n_mpc"]], obs[:, mpc_parameters["n_mpc"]:])
-        A_nom = sys_param[env_name]["A"]
-        A_max = np.copy(A_nom)
-        A_max[tuple(zip(*[(0, 0), (0, 2), (1, 1), (1, 3), (2, 2), (3, 3)]))] += 0.002
-        B_nom = sys_param[env_name]["B"]
-        B_max = np.copy(B_nom)
-        B_max *= 1.02
-        mpc_parameters["A_scenarios"] = [A_nom, A_max]
-        mpc_parameters["B_scenarios"] = [B_nom, B_max]
-        n_mpc = mpc_parameters["n_mpc"]
-        mpc_parameters["w_scenarios"] = [
-            np.zeros((n_mpc, 1)),
-            3 * noise_std * np.ones((n_mpc, 1)),
-            -3 * noise_std * np.ones((n_mpc, 1)),
-        ]
+    # if env_name == "tank":
+    #     # Compute state and ref from obs: the first n entries of obs is state, and the latter n entries are ref        
+    #     mpc_parameters["obs_to_state_and_ref"] = lambda obs: (obs[:, :mpc_parameters["n_mpc"]], obs[:, mpc_parameters["n_mpc"]:])
+    #     A_nom = sys_param[env_name]["A"]
+    #     A_max = np.copy(A_nom)
+    #     A_max[tuple(zip(*[(0, 0), (0, 2), (1, 1), (1, 3), (2, 2), (3, 3)]))] += 0.002
+    #     B_nom = sys_param[env_name]["B"]
+    #     B_max = np.copy(B_nom)
+    #     B_max *= 1.02
+    #     mpc_parameters["A_scenarios"] = [A_nom, A_max]
+    #     mpc_parameters["B_scenarios"] = [B_nom, B_max]
+    #     n_mpc = mpc_parameters["n_mpc"]
+    #     mpc_parameters["w_scenarios"] = [
+    #         np.zeros((n_mpc, 1)),
+    #         3 * noise_std * np.ones((n_mpc, 1)),
+    #         -3 * noise_std * np.ones((n_mpc, 1)),
+    #     ]
         # mpc_parameters["max_disturbance_per_dim"] = 0.5 * (3 * noise_std + 20 * 0.002 * 2 + 8 * 0.02 * 2)
+    if env_name == "tank":
+        A = sys_param[env_name]["A"]
+        B = sys_param[env_name]["B"]
+        mpc_parameters["A"] = A
+        mpc_parameters["B"] = B
+        
+        mpc_parameters["u_min"] = np.array([[0], [0]])
+        mpc_parameters["u_max"] = np.array([[8], [8]])
+        
+        F = np.array([
+            [1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 1., 0.],
+            [0., 0., 0., 1.],
+            [-1., 0., 0., 0.],
+            [0., -1., 0., 0.],
+            [0., 0., -1., 0.],
+            [0., 0., 0., -1.]
+        ])
+        g = np.array([0, 0, 0, 0, -19, -19, -19, -19])
+        mpc_parameters["F"] = F
+        mpc_parameters["g"] = g
+        
+        def obs_to_state_and_ref(obs):
+            x1, x2, x3, x4, x1_ref, x2_ref, x3_ref, x4_ref, u1d, u2d = obs[:, 0], obs[:, 1], obs[:, 2], obs[:, 3], obs[:, 4], obs[:, 5], obs[:, 6], obs[:, 7], obs[:, 8], obs[:, 9]
+            state = torch.stack([x1, x2, x3, x4, u1d, u2d], dim=1)
+            ref = torch.stack([x1_ref, x2_ref, x3_ref, x4_ref], dim=1)
+            return state, ref
+        mpc_parameters["obs_to_state_and_ref"] = obs_to_state_and_ref
+        
     if env_name == "cartpole":
         # Compute A, B matrices for linearized system
         m_pole = mpc_parameters["m_pole_nom"]

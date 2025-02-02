@@ -61,9 +61,9 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     device = x0.device
     
     # 获取 x 的最后一个数据，并增加新的维度，生成形状为 (batch_size, 1) 的张量
-    ud = x0[:, -1].unsqueeze(-1)    
-    # 使用索引去掉最后一列
-    x0 = x0[:, :-1]
+    ud = x0[:, -m_sys:]   
+    # 使用索引去掉最后m列
+    x0 = x0[:, :-m_sys]
 
     Ax0 = torch.cat([bmv((torch.linalg.matrix_power(A, k + 1)).unsqueeze(0), x0) for k in range(N)], 1)   # (bs, N * n_sys)
     m_original = 2 * (n_sys + m_sys) * N   # number of constraints
@@ -84,6 +84,13 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     x_min_repeated = x_min.repeat(1, N)     # repeat(1, N) 表示在第一个维度（bs）上重复1次，在第二个维度（4）上重复N次
     x_max_repeated = x_max.repeat(1, N)
     
+    # 将（m,1）的numpy array变成（bs，m）的torch tensor
+    u_min = torch.from_numpy(u_min).view(-1).repeat(bs, 1).to(device)
+    u_max = torch.from_numpy(u_max).view(-1).repeat(bs, 1).to(device)
+    # 将形状为 (bs, m) 的向量重复 N 次，变成形状为 (bs, mN) 的向量
+    u_min_repeated = u_min.repeat(1, N)     # repeat(1, N) 表示在第一个维度（bs）上重复1次，在第二个维度（4）上重复N次
+    u_max_repeated = u_max.repeat(1, N)
+    
     # b = torch.cat([
     #     Ax0 - x_min_repeated,
     #     x_max_repeated - Ax0,
@@ -93,8 +100,10 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     b = torch.cat([
         x_max_repeated - Ax0,
         Ax0 - x_min_repeated,  
-        u_max * torch.ones((bs, n_original), device=device),
-        -u_min * torch.ones((bs, n_original), device=device),
+        # u_max * torch.ones((bs, n_original), device=device),
+        # -u_min * torch.ones((bs, n_original), device=device),
+        u_max_repeated,
+        -u_min_repeated,
     ], 1)
     
     # if (F.any() != None) and (g.any() != None):
@@ -134,14 +143,16 @@ def psf2qp(n_sys, m_sys, N, A, B, x_min, x_max, u_min, u_max, x0, x_ref, normali
     # 创建一个形状为 (batch_size, n_qp) 的全零张量
     q_vector = torch.zeros((bs, n), device=device)
     # 将 last_data_unsqueezed 赋值给 result_vector 的第一个元素
-    q_vector[:, 0] = -ud.squeeze(-1)  # 赋值并去除多余的维度
+    q_vector[:, :m_sys] = -ud  # 赋值并去除多余的维度
     q = q_vector
     
     eps = 1e-3     # a very small number
     # 创建一个对角线元素全为 eps 的对角阵
     P = torch.diag(torch.full((n,), eps))
-    # 将第一行第一列的元素设置为 1
-    P[0, 0] = 1        # only work for action_dim = 1
+    for i in range(m_sys):
+        # 将第一行第一列的元素设置为 1
+        # P[0, 0] = 1        # only work for action_dim = 1
+        P[i, i] = 1
     P = P.to(device)
     
     if normalize:
