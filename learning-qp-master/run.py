@@ -224,6 +224,7 @@ if __name__ == "__main__":
             checkpoint_dir = f"runs/{full_experiment_name}/nn"
             if args.epoch_index == -1:
                 checkpoint_name = f"{checkpoint_dir}/{args.env}.pth"
+                # checkpoint_name = f"{checkpoint_dir}/last_tankep200000rew_-471861.34_.pth"
             else:
                 list_of_files = glob.glob(f"{checkpoint_dir}/last_{args.env}_ep_{args.epoch_index}_rew_*.pth")
                 checkpoint_name = max(list_of_files, key=os.path.getctime)

@@ -13,6 +13,8 @@ from ..utils.np_batch_op import np_batch_op
 import os
 from concurrent.futures import ThreadPoolExecutor
 from ..utils.sets import compute_MCI, construct_polyhedron_from_mci
+from src.envs.env_creators import sys_param
+
 
 
 class StrictAffineLayer(nn.Module):
@@ -200,6 +202,8 @@ class QPUnrolledNetwork(nn.Module):
         P_inv[0, 0] = 1        
         P_inv = P_inv.to(device)
         self.Pinv = P_inv    # shape: (nqp,nqp)
+        
+        self.m_sys = sys_param[env_name]["m"]
 
 
     def initialize_solver(self):
@@ -442,11 +446,13 @@ class QPUnrolledNetwork(nn.Module):
             b = self.get_b(x, mlp_out)
             
             # 获取 x 的最后一个数据，并增加新的维度，生成形状为 (batch_size, 1) 的张量
-            ud = x[:, -1].unsqueeze(-1)
+            # ud = x[:, -1].unsqueeze(-1)
+            ud = x[:, -self.m_sys:]
             # 创建一个形状为 (batch_size, n_qp) 的全零张量
             q_vector = torch.zeros((bs, self.n_qp), device=self.device)
             # 将 last_data_unsqueezed 赋值给 result_vector 的第一个元素
-            q_vector[:, 0] = -ud.squeeze(-1)  # 赋值并去除多余的维度
+            # q_vector[:, 0] = -ud.squeeze(-1)  # 赋值并去除多余的维度
+            q_vector[:, :self.m_sys] = -ud
             q = q_vector
             if self.force_feasible:
                 zeros_1 = torch.zeros((bs, 1), device=self.device)

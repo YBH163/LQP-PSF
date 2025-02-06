@@ -59,7 +59,7 @@ sys_param = {
         "x_safe_min": 0,
         "x_safe_max": 20,
         "u_min": 0,
-        "u_max": 8,
+        "u_max": 1,
         "states_min": np.array([[0], [0], [0], [0]]),
         "states_max": np.array([[22], [22], [22], [22]]),
         "states_safe_min": np.array([[0], [0], [0], [0]]),

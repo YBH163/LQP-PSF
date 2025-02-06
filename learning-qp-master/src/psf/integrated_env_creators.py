@@ -59,8 +59,8 @@ class Integrated_env:
             self.noise_values = [0.,0., 0.5, 1., 2., 3., 5., 6., 7., 8., 10., 12., 15.]
             self.noise = 5 * torch.ones((self.bs, 1), device=self.device)   # 初始默认值
         elif env_name == "tank":
-            self.noise_values = [0.,0., 0.3, 0.5, 1., 2., 3., 5., 6., 8., 10., 12.]
-            self.noise = 1 * torch.ones((self.bs, self.m), device=self.device)   # 初始默认值
+            self.noise_values = [0., 0., 0.05, 0.1, 0.2, 0.3, 0.5, 1., 3., 5., 10.]
+            self.noise = 0.1 * torch.ones((self.bs, self.m), device=self.device)   # 初始默认值
         
         self.stats = pd.DataFrame(columns=['i', 'cumulative_deviation'])
         self.cum_deviation = torch.zeros((self.bs,), device=self.device)
@@ -68,6 +68,7 @@ class Integrated_env:
         self.run_name = self.env.run_name
         self.step_count = self.env.step_count
         self.ud = torch.zeros((self.bs, self.m), device=self.device)
+        self.ud_type = torch.zeros((self.bs, 1), device=self.device)       # 决定训练时使用的ud类型（0代表LQR+噪声，1代表bangbang控制
         
     # def get_noise(self):
     #     # 创建一个Beta分布，alpha和beta的值可以根据需要调整
@@ -84,25 +85,27 @@ class Integrated_env:
             # generate randomly (only work for action_dim = 1)
             # ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
             
-            # noise = self.get_noise()
-            # noise = 0.3
-            v = (self.noise * torch.randn((self.bs, self.m), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声
-            # ud = v
-            ud = ud.clamp(self.env.u_min, self.env.u_max)
-            # ud = ud.squeeze(-1)
+            # LQR+noise
+            # self.noise = torch.zeros((self.bs, self.m), device=self.device)     # 只用0噪声训练
+            # v = (self.noise * torch.randn((self.bs, self.m), device=self.device))
+            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 单重噪声
+            # ud = ud.clamp(self.env.u_min, self.env.u_max)
+            
+            # bangbang control
+            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, 1),  torch.zeros_like(self.ud))
+
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            ud = torch.where(self.step_count <= 50, torch.full_like(self.ud, 3),  torch.zeros_like(self.ud))
+            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, 1),  torch.zeros_like(self.ud))
             
             # LQR control
-            # noise = 0.1
+            # noise = 0
             # v = (noise * torch.randn((self.bs, self.m), device=self.device))
-            # ud = self.env.get_action_LQR(noise_level = noise) + v  # 双重噪声
+            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             # ud = ud.clamp(self.env.u_min, self.env.u_max)
-            # ud = ud.squeeze(-1)
-
+            
+        # ud = ud.squeeze(-1)
         self.ud = ud
         return ud
     
@@ -145,15 +148,15 @@ class Integrated_env:
     def reward(self,original_reward, action):
         if self.env_name == "double_integrator":
             coef_safety = -120.0
-            coef_deviation = 50.0
+            coef_deviation = -50.0
             coef_survival = 10.0 
-            coef_terminate = 1.
+            coef_terminate = -1.
             zero_deviation_reward = 10.
         elif self.env_name == "cartpole":
             coef_safety = -200.0
-            coef_deviation = 20.0
+            coef_deviation = -20.0
             coef_survival = 100.0  
-            coef_terminate = 1000000.
+            coef_terminate = -1000000.
             zero_deviation_reward = 80.
             # initial
             # coef_safety = -2000.0
@@ -163,10 +166,12 @@ class Integrated_env:
             # zero_deviation_reward = 100.
         elif self.env_name == "tank":
             coef_safety = -200.0
-            coef_deviation = 100.0
+            coef_deviation = -300.0
             coef_survival = 100.0  
-            coef_terminate = 1000000.
-            zero_deviation_reward = 100.
+            coef_terminate = -1000000.
+            # coef_survival = 0.0  
+            # coef_terminate = -0.
+            zero_deviation_reward = 200.
             
         # safe cost
         original_safe_cost = original_reward
@@ -181,13 +186,13 @@ class Integrated_env:
         
         # deviation_cost = -coef_deviation * deviation
         # 当 deviation 不等于 0 时，计算 deviation_cost；否则，设置为 10
-        deviation_cost = torch.where(deviation == 0, torch.full_like(deviation, zero_deviation_reward), -coef_deviation * deviation)
+        deviation_cost = torch.where(deviation == 0, torch.full_like(deviation, zero_deviation_reward), coef_deviation * deviation)
         
         # survival_reward
         survival_reward = coef_survival  # 每个步骤的存活奖励
 
         # 添加提前terminate惩罚
-        terminate_cost = -coef_terminate * (self.env.is_done == 1)
+        terminate_cost = coef_terminate * (self.env.is_done == 1)
 
         combined_reward = safe_cost + deviation_cost + survival_reward + terminate_cost  # 注意正负号！！！
 
@@ -242,8 +247,12 @@ class Integrated_env:
         """
         self.already_on_stats[i] = 1
         cumulative_deviation = self.cum_deviation[i].item()
-        avg_deviation = self.cum_deviation.mean().item()
-        ic(avg_deviation)
+        ic(i)
+        ic(cumulative_deviation)
+        # 只在最后的时候输出一次avg_deviation
+        if i==self.bs-1 :
+            avg_deviation = self.cum_deviation.mean().item()
+            ic(avg_deviation)
         self.stats.loc[len(self.stats)] = [i.item(),  cumulative_deviation]
         
     def dump_stats(self, filename=None):
