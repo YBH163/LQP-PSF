@@ -59,7 +59,7 @@ class Integrated_env:
             self.noise_values = [0.,0., 0.5, 1., 2., 3., 5., 6., 7., 8., 10., 12., 15.]
             self.noise = 5 * torch.ones((self.bs, 1), device=self.device)   # 初始默认值
         elif env_name == "tank":
-            self.noise_values = [0., 0., 0.05, 0.1, 0.2, 0.3, 0.5, 1., 3., 5., 10.]
+            self.noise_values = [0., 0., 0.05, 0.1, 0.3, 0.5, 1., 2., 3., 5., 8.]
             self.noise = 0.1 * torch.ones((self.bs, self.m), device=self.device)   # 初始默认值
         
         self.stats = pd.DataFrame(columns=['i', 'cumulative_deviation'])
@@ -87,23 +87,23 @@ class Integrated_env:
             
             # LQR+noise
             # self.noise = torch.zeros((self.bs, self.m), device=self.device)     # 只用0噪声训练
-            # v = (self.noise * torch.randn((self.bs, self.m), device=self.device))
-            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 单重噪声
-            # ud = ud.clamp(self.env.u_min, self.env.u_max)
+            v = (self.noise * torch.randn((self.bs, self.m), device=self.device))
+            ud = self.env.get_action_LQR(noise_level = 0) + v  # 单重噪声
+            ud = ud.clamp(self.env.u_min, self.env.u_max)
             
             # bangbang control
-            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, 1),  torch.zeros_like(self.ud))
+            # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, 1),  torch.zeros_like(self.ud))
 
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, 1),  torch.zeros_like(self.ud))
+            # ud = torch.where((self.step_count <= 30).unsqueeze(1), torch.full_like(self.ud, 0.3),  torch.zeros_like(self.ud))
             
             # LQR control
-            # noise = 0
-            # v = (noise * torch.randn((self.bs, self.m), device=self.device))
-            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
-            # ud = ud.clamp(self.env.u_min, self.env.u_max)
+            noise = 8
+            v = (noise * torch.randn((self.bs, self.m), device=self.device))
+            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
+            ud = ud.clamp(self.env.u_min, self.env.u_max)
             
         # ud = ud.squeeze(-1)
         self.ud = ud
@@ -166,7 +166,7 @@ class Integrated_env:
             # zero_deviation_reward = 100.
         elif self.env_name == "tank":
             coef_safety = -200.0
-            coef_deviation = -300.0
+            coef_deviation = -500.0
             coef_survival = 100.0  
             coef_terminate = -1000000.
             # coef_survival = 0.0  
@@ -208,12 +208,14 @@ class Integrated_env:
         elif self.train_or_test == "test":
             return original_safe_cost      # original safe cost
     
-    def step(self, action):   
+    def step(self, input_action):   
         self.reset_done_envs()
         
         # 用ud进行测试时
         # original_obs, original_reward, done, info = self.env.step(self.ud)   
         # reward = self.reward(original_reward, self.ud)
+
+        action = input_action
         
         # 正常测试
         original_obs, original_reward, done, info = self.env.step(action)   
@@ -236,6 +238,7 @@ class Integrated_env:
         
         # get next ud
         self.get_ud(original_obs)   # update ud every step
+        
         return self.obs(), reward, done, info
     
     def render(self, *args, **kwargs):

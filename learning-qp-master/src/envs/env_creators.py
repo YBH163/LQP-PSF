@@ -58,7 +58,7 @@ sys_param = {
         "x_max": 22,
         "x_safe_min": 0,
         "x_safe_max": 20,
-        "u_min": 0,
+        "u_min": -1,
         "u_max": 1,
         "states_min": np.array([[0], [0], [0], [0]]),
         "states_max": np.array([[22], [22], [22], [22]]),
@@ -104,7 +104,7 @@ def tank_ref_generator(size, device, rng):
     Generate reference states for the tank environment.
     Sampled across the entire state space.
     """
-    x_ref = 19. * torch.rand((size, 4), generator=rng, device=device)
+    x_ref = 16. * torch.rand((size, 4), generator=rng, device=device)
     return x_ref
 
 def tank_randomizer(size, device, rng):

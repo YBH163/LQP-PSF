@@ -294,8 +294,8 @@ class QPUnrolledNetwork(nn.Module):
                 xref,
                 normalize=self.mpc_baseline.get("normalize", False),
                 Qf=self.mpc_baseline.get("terminal_coef", 0.) * t(np.eye(self.mpc_baseline["n_mpc"])) if self.mpc_baseline.get("Qf", None) is None else t(self.mpc_baseline["Qf"]),
-                F = None,
-                g = None,
+                F = F,
+                g = g,
             )
             if not use_osqp_oracle:
                 solver = QPSolver(x.device, n, m, P=P, H=H)
