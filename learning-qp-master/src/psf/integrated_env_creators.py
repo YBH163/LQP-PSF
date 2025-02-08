@@ -68,31 +68,45 @@ class Integrated_env:
         self.run_name = self.env.run_name
         self.step_count = self.env.step_count
         self.ud = torch.zeros((self.bs, self.m), device=self.device)
-        self.ud_type = torch.zeros((self.bs, 1), device=self.device)       # 决定训练时使用的ud类型（0代表LQR+噪声，1代表bangbang控制
+        self.ud_type = torch.zeros((self.bs, 1), device=self.device, dtype = torch.long)       # 决定训练时使用的ud类型（0代表LQR+噪声，1代表bangbang控制
+        self.ud_type_values = torch.zeros((self.bs, 1), device=self.device)       # 决定self.ud_type，方便按概率选择
         
-    # def get_noise(self):
-    #     # 创建一个Beta分布，alpha和beta的值可以根据需要调整
-    #     dist = Beta(torch.tensor([1.0]), torch.tensor([10.0]))
-    #     # noise = dist.sample() * 2  # 缩放到0到2的范围
-    #     noise = dist.sample()
-    #     noise = noise.to(self.device)
-    #     return noise
+        # for bangbang control
+        self.bb_switch_values = [10, 20, 30, 50, 60, 80]
+        self.bb_switch = 50 * torch.ones((self.bs, 1), device=self.device, dtype = torch.long)   # 初始默认值
+        self.bb_amplitude_values = [-1, 1]
+        self.bb_amplitude = torch.ones((self.bs, 1), device=self.device, dtype = torch.long)   # 初始默认值
     
+    def select_train_ud(self):
+        # 初始化 ud
+        ud = torch.zeros((self.bs, self.m), device=self.device)
+        
+        # LQR+noise
+        v = (self.noise * torch.randn((self.bs, self.m), device=self.device))
+        ud_lqr = self.env.get_action_LQR(noise_level=0) + v  # 单重噪声
+        ud_lqr = ud_lqr.clamp(self.env.u_min, self.env.u_max)
+        
+        # bangbang control
+        condition_bb = (self.step_count.unsqueeze(-1) >= self.bb_switch)
+        ud_bb = torch.where(condition_bb, 
+                            torch.zeros_like(self.ud),  
+                            self.bb_amplitude.double())
+        
+        # 随机ud
+        random_values = torch.rand(self.bs, self.m, device=self.device)  # 形状为 (self.bs, self.m)，值在 [0, 1) 范围内
+        ud_random = self.u_min + (self.u_max - self.u_min) * random_values  # 形状为 (self.bs, self.m)
+        
+        # 根据 self.ud_type 的值选择不同的行为
+        ud = torch.where(self.ud_type == 0, ud_lqr, 
+                        torch.where(self.ud_type == 1, ud_bb, ud_random))
+        
+        return ud
+
     def get_ud(self, obs):
         # x, x_dot, theta, theta_dot, x_ref = self.env.obs()
         # theta = obs[..., 2]
         if self.train_or_test == "train":
-            # generate randomly (only work for action_dim = 1)
-            # ud = self.u_min + (self.u_max - self.u_min) * torch.rand(self.env.bs, device=self.device)
-            
-            # LQR+noise
-            # self.noise = torch.zeros((self.bs, self.m), device=self.device)     # 只用0噪声训练
-            v = (self.noise * torch.randn((self.bs, self.m), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = 0) + v  # 单重噪声
-            ud = ud.clamp(self.env.u_min, self.env.u_max)
-            
-            # bangbang control
-            # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, 1),  torch.zeros_like(self.ud))
+            ud = self.select_train_ud()
 
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
@@ -122,10 +136,31 @@ class Integrated_env:
     
     def reset_done_envs(self, need_reset=None, randomize_seed=None):
         is_done = self.env.is_done.bool() if need_reset is None else need_reset.bool()
+        
+        # 为结束的环境选择一个新的ud_type
+        new_ud_type_values = torch.rand(int(is_done.sum()), device=self.device)
+        self.ud_type_values[is_done] = new_ud_type_values.unsqueeze(-1)
+        self.ud_type[is_done] = torch.where(
+            self.ud_type_values[is_done] < 0.4, 
+            0, 
+            torch.where(
+                self.ud_type_values[is_done] < 0.8, 
+                1, 
+                2
+            )
+        )
+
         # 为结束的环境选择一个新的随机噪声值
         new_noise = torch.tensor(np.random.choice(self.noise_values, size=int(is_done.sum())), device=self.device)        
         # 更新self.noise张量中对应结束环境的噪声值
         self.noise[is_done] = new_noise.unsqueeze(-1)  # 确保维度匹配
+
+        # 为结束的环境选择一个新的bangbang控制参数
+        new_bb_switch = torch.tensor(np.random.choice(self.bb_switch_values, size=int(is_done.sum())), device=self.device)        
+        self.bb_switch[is_done] = new_bb_switch.unsqueeze(-1)  
+        new_bb_amplitude = torch.tensor(np.random.choice(self.bb_amplitude_values, size=int(is_done.sum())), device=self.device)        
+        self.bb_amplitude[is_done] = new_bb_amplitude.unsqueeze(-1)
+
         self.cum_deviation[is_done] = 0
     
     def done(self):
