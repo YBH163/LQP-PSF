@@ -111,13 +111,13 @@ class Integrated_env:
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            # ud = torch.where((self.step_count <= 30).unsqueeze(1), torch.full_like(self.ud, 0.3),  torch.zeros_like(self.ud))
+            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 8
-            v = (noise * torch.randn((self.bs, self.m), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
-            ud = ud.clamp(self.env.u_min, self.env.u_max)
+            # noise = 5
+            # v = (noise * torch.randn((self.bs, self.m), device=self.device))
+            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
+            # ud = ud.clamp(self.env.u_min, self.env.u_max)
             
         # ud = ud.squeeze(-1)
         self.ud = ud
@@ -187,12 +187,16 @@ class Integrated_env:
             coef_survival = 10.0 
             coef_terminate = -1.
             zero_deviation_reward = 10.
+            near_zero_deviation = 0
+            coef_small_deviation = 0
         elif self.env_name == "cartpole":
             coef_safety = -200.0
             coef_deviation = -20.0
             coef_survival = 100.0  
             coef_terminate = -1000000.
             zero_deviation_reward = 80.
+            near_zero_deviation = 0
+            coef_small_deviation = 0
             # initial
             # coef_safety = -2000.0
             # coef_deviation = 50.0
@@ -200,13 +204,15 @@ class Integrated_env:
             # coef_terminate = 100000.
             # zero_deviation_reward = 100.
         elif self.env_name == "tank":
-            coef_safety = -200.0
+            coef_safety = -400.0
             coef_deviation = -500.0
             coef_survival = 100.0  
             coef_terminate = -1000000.
             # coef_survival = 0.0  
             # coef_terminate = -0.
-            zero_deviation_reward = 200.
+            zero_deviation_reward = 500.
+            near_zero_deviation = 1e-2
+            coef_small_deviation = 30000
             
         # safe cost
         original_safe_cost = original_reward
@@ -219,9 +225,17 @@ class Integrated_env:
         deviation = torch.sum(deviation, dim=1)
         self.cum_deviation += deviation
         
-        # deviation_cost = -coef_deviation * deviation
+        deviation_cost = coef_deviation * deviation
         # 当 deviation 不等于 0 时，计算 deviation_cost；否则，设置为 10
-        deviation_cost = torch.where(deviation == 0, torch.full_like(deviation, zero_deviation_reward), coef_deviation * deviation)
+        # deviation_cost = torch.where(deviation == 0, torch.full_like(deviation, zero_deviation_reward), coef_deviation * deviation)
+        # deviation_cost = torch.where(deviation <= near_zero_deviation, torch.full_like(deviation, zero_deviation_reward), coef_deviation * deviation)    # 条件放宽
+
+        # 当 deviation 小于 near_zero_deviation 时，geismall_deviation_reward, 奖励越接近 0 越大
+        small_deviation_reward = torch.where(
+            deviation <= near_zero_deviation,
+            zero_deviation_reward - coef_small_deviation * deviation,  # 奖励函数
+            torch.zeros_like(deviation)  # 默认奖励为 0
+        )
         
         # survival_reward
         survival_reward = coef_survival  # 每个步骤的存活奖励
@@ -229,15 +243,17 @@ class Integrated_env:
         # 添加提前terminate惩罚
         terminate_cost = coef_terminate * (self.env.is_done == 1)
 
-        combined_reward = safe_cost + deviation_cost + survival_reward + terminate_cost  # 注意正负号！！！
+        combined_reward = safe_cost + deviation_cost + small_deviation_reward + survival_reward + terminate_cost  # 注意正负号！！！
 
         if not self.env.quiet:
             avg_safe_cost = safe_cost.float().mean().item()
             avg_deviation_cost = deviation_cost.mean().item()
             avg_terminate_cost = coef_terminate * terminate_cost.mean().item()
+            avg_small_deviation_reward = small_deviation_reward.mean().item()
             ic(avg_safe_cost)
             ic(avg_deviation_cost)
             ic(avg_terminate_cost)
+            ic(avg_small_deviation_reward)
         if self.train_or_test == "train":
             return combined_reward
         elif self.train_or_test == "test":
