@@ -96,10 +96,12 @@ class Integrated_env:
         random_values = torch.rand(self.bs, self.m, device=self.device)  # 形状为 (self.bs, self.m)，值在 [0, 1) 范围内
         ud_random = self.u_min + (self.u_max - self.u_min) * random_values  # 形状为 (self.bs, self.m)
         
-        # 根据 self.ud_type 的值选择不同的行为
-        ud = torch.where(self.ud_type == 0, ud_lqr, 
-                        torch.where(self.ud_type == 1, ud_bb, ud_random))
-        
+        if self.env_name == "tank":
+            # 根据 self.ud_type 的值选择不同的行为
+            ud = torch.where(self.ud_type == 0, ud_lqr, 
+                            torch.where(self.ud_type == 1, ud_bb, ud_random))
+        else:
+            ud = ud_lqr    
         return ud
 
     def get_ud(self, obs):
@@ -111,7 +113,7 @@ class Integrated_env:
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
+            ud = torch.where((self.step_count <= 30).unsqueeze(1), torch.full_like(self.ud, 0.3),  torch.zeros_like(self.ud))
             
             # LQR control
             # noise = 5
@@ -204,7 +206,7 @@ class Integrated_env:
             # coef_terminate = 100000.
             # zero_deviation_reward = 100.
         elif self.env_name == "tank":
-            coef_safety = -400.0
+            coef_safety = -1000.0
             coef_deviation = -500.0
             coef_survival = 100.0  
             coef_terminate = -1000000.
