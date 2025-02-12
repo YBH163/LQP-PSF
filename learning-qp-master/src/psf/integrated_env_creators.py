@@ -113,7 +113,7 @@ class Integrated_env:
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            ud = torch.where((self.step_count <= 30).unsqueeze(1), torch.full_like(self.ud, 0.3),  torch.zeros_like(self.ud))
+            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
             # noise = 5
@@ -197,8 +197,8 @@ class Integrated_env:
             coef_survival = 100.0  
             coef_terminate = -1000000.
             zero_deviation_reward = 80.
-            near_zero_deviation = 0
-            coef_small_deviation = 0
+            near_zero_deviation = 1e-3
+            coef_small_deviation = 60000
             # initial
             # coef_safety = -2000.0
             # coef_deviation = 50.0
