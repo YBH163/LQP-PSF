@@ -294,20 +294,22 @@ class LinearSystem():
             if self.ref_generator is not None:
                 return self.ref_generator(size, self.device, self.rng_initial)
             else:
-                # 稳定到原点
+                # 生成随时间变化的参考轨迹
+                t = self.step_count.float() / self.max_steps
                 x_ref = torch.zeros((size, self.n), device=self.device)
                 
-                # Fall back to default reference generation
-                # u_ref = self.u_eq_min + (self.u_eq_max - self.u_eq_min) * torch.rand((size, self.m), generator=self.rng_initial, device=self.device)
-                # epsilon = 1e-6
-                # A_reg = torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0 + epsilon * torch.eye(self.n, device=self.device).unsqueeze(0)
-                # x_ref = bsolve(A_reg, bmv(self.B0, u_ref))
-                # # x_ref = bsolve(torch.eye(self.n, device=self.device).unsqueeze(0) - self.A0, bmv(self.B0, u_ref))
-                # x_ref += self.barrier_thresh * torch.randn((size, self.n), generator=self.rng_initial, device=self.device)
-                # x_ref = x_ref.clamp(self.x_min + self.barrier_thresh, self.x_max - self.barrier_thresh)
+                # 示例：使用正弦波生成参考轨迹
+                t = t.unsqueeze(1)  # (bs, 1)
+                val = torch.sin(2 * torch.pi * t)  # (bs, 1)
+                
+                range_min = self.x_safe_min.squeeze(0)  # (n,)
+                range_max = self.x_safe_max.squeeze(0)  # (n,)
+                
+                x_ref = 0.5 * (range_max - range_min) * val + 0.5 * (range_max + range_min)
+                
+                return x_ref
         else:
             return torch.zeros((size, self.n), device=self.device)
-        return x_ref
 
     def generate_random_point_in_hull(self):
         while True:
@@ -371,7 +373,8 @@ class LinearSystem():
         size = torch.sum(is_done)
         self.step_count[is_done] = 0
         self.cum_cost[is_done] = 0
-        self.x_ref[is_done, :] = self.generate_ref(size) if x_ref is None else x_ref
+        # self.x_ref[is_done, :] = self.generate_ref(size) if x_ref is None else x_ref
+        self.x_ref[is_done, :] = torch.zeros((size, self.n), device=self.device)    # 所有done了的都从0开始吧。
         self.x0[is_done, :] = self.generate_initial(size) if x is None else x
         self.x[is_done, :] = self.x0[is_done, :]
         self.is_done[is_done] = 0
@@ -453,6 +456,7 @@ class LinearSystem():
         else:
             self.x = bsolve(torch.eye(self.n, device=self.device).unsqueeze(0) - self.A, bmv(self.B, u))
         self.step_count += 1
+        self.x_ref = self.generate_ref(self.bs)  # 更新参考状态
         self.is_done[self.step_count >= self.max_steps] = 2  # 2 for timeout
         self.is_done[torch.logical_not(self.check_in_bound()).nonzero()] = 1   # 1 for failure
         if self.keep_stats:

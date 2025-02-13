@@ -344,7 +344,7 @@ class Integrated_env:
                 plt.axhline(y=0.5, color='gray', linestyle='--')
                 plt.axhline(y=-0.5, color='gray', linestyle='--')
         elif self.env_name == "double_integrator":
-            for i, state_label in enumerate(['x', 'x_dot']):
+            for i, state_label in enumerate(['x', 'x_dot', 'x_ref', 'x_dot_ref']):
                 plt.plot(state_array[:,i], label=f'{state_label}')
                 # 在 y=0.5 和 y=-0.5 处绘制水平虚线
                 plt.axhline(y=0.5, color='gray', linestyle='--')
