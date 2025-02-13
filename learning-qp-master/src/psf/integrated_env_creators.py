@@ -113,13 +113,13 @@ class Integrated_env:
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
+            # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            # noise = 5
-            # v = (noise * torch.randn((self.bs, self.m), device=self.device))
-            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
-            # ud = ud.clamp(self.env.u_min, self.env.u_max)
+            noise = 0
+            v = (noise * torch.randn((self.bs, self.m), device=self.device))
+            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
+            ud = ud.clamp(self.env.u_min, self.env.u_max)
             
         # ud = ud.squeeze(-1)
         self.ud = ud
@@ -197,8 +197,8 @@ class Integrated_env:
             coef_survival = 100.0  
             coef_terminate = -1000000.
             zero_deviation_reward = 80.
-            near_zero_deviation = 1e-3
-            coef_small_deviation = 60000
+            near_zero_deviation = 0.1
+            coef_small_deviation = 600
             # initial
             # coef_safety = -2000.0
             # coef_deviation = 50.0
