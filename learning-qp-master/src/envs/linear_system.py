@@ -131,7 +131,7 @@ class LinearSystem():
         self.barrier_thresh = barrier_thresh    # 安全边界或屏障阈值
         self.max_steps = max_steps
         self.stabilization_only = stabilization_only
-        self.num_states = self.n if stabilization_only else 2 * self.n
+        self.num_states = self.n if stabilization_only else self.n + 1
         self.num_actions = self.m
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.num_states,), dtype = np.float64)
         self.action_space = gym.spaces.Box(low=u_min, high=u_max, shape=(self.num_actions,), dtype = np.float64)
@@ -139,7 +139,7 @@ class LinearSystem():
         self.x = 0.5 * (self.x_max + self.x_min) * torch.ones((bs, self.n), device=device)
         self.x0 = 0.5 * (self.x_max + self.x_min) * torch.ones((bs, self.n), device=device)
         self.u = torch.zeros((bs, self.m), device=device)
-        self.x_ref = 0.5 * (self.x_max + self.x_min) * torch.ones((bs, self.n), device=device)
+        self.x_ref = 0.5 * (x_safe_max[0] + x_safe_min[0]) * torch.ones((bs, 1), device=device)    # reference for the first state
         # Keep record of the first noise vector in each trajectory, as an identifier of the instantiation of the randomness
         self.w0 = torch.zeros_like(self.x)
         self.is_done = torch.zeros((bs,), dtype=torch.uint8, device=device)
@@ -191,9 +191,11 @@ class LinearSystem():
     def get_action_LQR(self, noise_level = None):        
         # 将K转为torch tensor类型
         K_tensor = torch.from_numpy(self.K).to(self.device)
+        x_ref = torch.zeros((self.bs, self.n),device = self.device)
+        x_ref[:, 0] = self.x_ref
         # LQR控制律
         if noise_level is None:
-            action = K_tensor @ ((self.x_ref-self.x).T)
+            action = K_tensor @ ((x_ref-self.x).T)
             # 得到的是1*bs的，还需要转置一下成为bs*1的才行
             action_transposed = action.t()  # (bs,1)
         else:
@@ -202,7 +204,7 @@ class LinearSystem():
             # 将噪声添加到K_tensor上
             K_tensor_noisy = K_tensor + noise
             # 使用带有噪声的K_tensor_noisy
-            action = K_tensor_noisy @ ((self.x_ref - self.x).T)
+            action = K_tensor_noisy @ ((x_ref - self.x).T)
             # 得到的是1*bs的，还需要转置一下成为bs*1的才行
             action_transposed = action.t()  # (bs,1)
         return action_transposed
@@ -226,7 +228,9 @@ class LinearSystem():
         """
         Computes the reward based on the current state, control input, and various coefficients.
         """
-        cost = self.cost(self.x - self.x_ref, self.u)
+        x_ref = torch.zeros((self.bs, self.n))
+        x_ref[:, 0] = self.x_ref
+        cost = self.cost(self.x - x_ref, self.u)
         rew_main = -cost
         rew_state_bar = torch.sum(torch.log(((self.x_max - self.x) / self.barrier_thresh).clamp(1e-8, 1.)) + torch.log(((self.x - self.x_min) / self.barrier_thresh).clamp(1e-8, 1.)), dim=-1)
         rew_done = -1.0 * (self.is_done == 1)
@@ -296,16 +300,16 @@ class LinearSystem():
             else:
                 # 生成随时间变化的参考轨迹
                 t = self.step_count.float() / self.max_steps
-                x_ref = torch.zeros((size, self.n), device=self.device)
+                x_ref = torch.zeros((size,), device=self.device)
                 
                 # 示例：使用正弦波生成参考轨迹
-                t = t.unsqueeze(1)  # (bs, 1)
+                t = t.unsqueeze(1).to(x_ref.dtype)  # (bs, 1)
                 val = torch.sin(2 * torch.pi * t)  # (bs, 1)
                 
-                range_min = self.x_safe_min.squeeze(0)  # (n,)
-                range_max = self.x_safe_max.squeeze(0)  # (n,)
+                x_safe_min = self.x_safe_min[0,0].item()  
+                x_safe_max = self.x_safe_max[0,0].item()  
                 
-                x_ref = 0.5 * (range_max - range_min) * val + 0.5 * (range_max + range_min)
+                x_ref = 0.5 * (x_safe_max - x_safe_min) * val + 0.5 * (x_safe_max + x_safe_min)
                 
                 return x_ref
         else:
@@ -343,7 +347,8 @@ class LinearSystem():
                 new_point = self.generate_random_point_in_hull()
                 initial_states_list.append(new_point)
             # 将 NumPy 数组列表转换为 PyTorch 张量
-            x0 = torch.tensor(initial_states_list, device=self.device).reshape(size, 2)           
+            x0 = torch.tensor(initial_states_list, device=self.device).reshape(size, 2)  
+            x0 = x0.to(self.x.dtype)         
             return x0
 
     def reset_done_envs(self, need_reset=None, x=None, x_ref=None, randomize_seed=None):
@@ -374,7 +379,7 @@ class LinearSystem():
         self.step_count[is_done] = 0
         self.cum_cost[is_done] = 0
         # self.x_ref[is_done, :] = self.generate_ref(size) if x_ref is None else x_ref
-        self.x_ref[is_done, :] = torch.zeros((size, self.n), device=self.device)    # 所有done了的都从0开始吧。
+        self.x_ref[is_done] = torch.zeros((size, 1), device=self.device)    # 所有done了的都从0开始吧。
         self.x0[is_done, :] = self.generate_initial(size) if x is None else x
         self.x[is_done, :] = self.x0[is_done, :]
         self.is_done[is_done] = 0

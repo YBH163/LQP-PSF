@@ -7,6 +7,8 @@ import random
 import os
 import matplotlib.pyplot as plt
 
+torch.set_default_dtype(torch.float64)
+
 # seed
 seed = 42
 random.seed(seed)
@@ -31,21 +33,25 @@ exp_name = f"test_lqr"
 state0 = [-1,0]
 x_ref = [0,0]
 
-env_name = "cartpole"
+env_name = "double_integrator"
 # 创建环境实例
-# env = env_creators["double_integrator"](
-#     noise_level=noise_level,
-#     bs=bs,
-#     max_steps=300,
-#     keep_stats=True,
-#     run_name=exp_name,
-#     exp_name=exp_name,
-#     randomize=parametric_uncertainty,
-#     quiet = True,
-#     # Q = np.diag([10., 1e-4, 100., 1e-4]),
-#     # R = np.array([[1]]),
-#     device = device
-# )
+env = env_creators["double_integrator"](
+    noise_level=noise_level,
+    bs=bs,
+    max_steps=300,
+    keep_stats=True,
+    run_name=exp_name,
+    exp_name=exp_name,
+    randomize=parametric_uncertainty,
+    quiet = True,
+    # Q = np.diag([10., 1e-4, 100., 1e-4]),
+    # R = np.array([[1]]),
+    device = device,
+    env_name_ = env_name,
+)
+
+'''
+env_name = "cartpole"
 env = env_creators[env_name](
     noise_level=noise_level,
     bs=bs,
@@ -59,6 +65,7 @@ env = env_creators[env_name](
     # R = np.array([[1]]),
     device = device
 )
+'''
 
 # 收集数据的函数
 def collect_data(env, num_episodes, save_interval, csv_file):    
@@ -212,7 +219,7 @@ def plot_states_controls(states, controls):
         for i, state_label in enumerate(['x', 'x_dot', 'theta', 'theta_dot', 'x_ref']):
             plt.plot(state_array[:,i], label=f'{state_label}')
     elif env_name == "double_integrator":
-        for i, state_label in enumerate(['x', 'x_dot']):
+        for i, state_label in enumerate(['x', 'x_dot', 'x_ref']):
             plt.plot(state_array[:,i], label=f'{state_label}')
     
     plt.xlabel('Time Step')
@@ -233,7 +240,7 @@ def plot_states_controls(states, controls):
 if __name__ == "__main__":    
     num_episodes = 100  # 假设我们想要100个episodes的数据
     is_test = 1
-    is_visualize = 0
+    is_visualize = 1
     save_interval = 10  # 每10个episodes保存一次数据
     if is_test:
         if is_visualize:
