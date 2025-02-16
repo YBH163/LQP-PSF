@@ -113,13 +113,13 @@ class Integrated_env:
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
+            # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            # noise = 5
-            # v = (noise * torch.randn((self.bs, self.m), device=self.device))
-            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
-            # ud = ud.clamp(self.env.u_min, self.env.u_max)
+            noise = 1
+            v = (noise * torch.randn((self.bs, self.m), device=self.device))
+            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
+            ud = ud.clamp(self.env.u_min, self.env.u_max)
             
         # ud = ud.squeeze(-1)
         self.ud = ud
@@ -344,7 +344,7 @@ class Integrated_env:
                 plt.axhline(y=0.5, color='gray', linestyle='--')
                 plt.axhline(y=-0.5, color='gray', linestyle='--')
         elif self.env_name == "double_integrator":
-            for i, state_label in enumerate(['x', 'x_dot', 'x_ref', 'x_dot_ref']):
+            for i, state_label in enumerate(['x', 'x_dot', 'x_ref']):
                 plt.plot(state_array[:,i], label=f'{state_label}')
                 # 在 y=0.5 和 y=-0.5 处绘制水平虚线
                 plt.axhline(y=0.5, color='gray', linestyle='--')

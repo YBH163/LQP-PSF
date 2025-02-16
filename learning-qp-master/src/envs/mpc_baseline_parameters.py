@@ -130,10 +130,14 @@ def get_mpc_baseline_parameters(env_name, N, noise_std=0.):
         mpc_parameters["A"] = A
         mpc_parameters["B"] = B
 
+        mpc_parameters["u_min"] = np.array([-0.5])
+        mpc_parameters["u_max"] = np.array([0.5])
+
         # Compute state and ref from obs: obs is in format (x, x_dot, theta, theta_dot, x_ref, ud)
         def obs_to_state_and_ref(obs):
-            x1, x2, x1_ref, x2_ref,  ud = obs[:, 0], obs[:, 1], obs[:, 2], obs[:, 3], obs[:, 4]
+            x1, x2, x1_ref, ud = obs[:, 0], obs[:, 1], obs[:, 2], obs[:, 3]
             state = torch.stack([x1, x2, ud], dim=1)
+            x2_ref = torch.zeros_like(x1_ref)
             ref = torch.stack([x1_ref, x2_ref], dim=1)
             return state, ref
         mpc_parameters["obs_to_state_and_ref"] = obs_to_state_and_ref

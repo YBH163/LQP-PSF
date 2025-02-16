@@ -14,7 +14,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from ..utils.sets import compute_MCI, construct_polyhedron_from_mci
 from src.envs.env_creators import sys_param
-
+import pickle
 
 
 class StrictAffineLayer(nn.Module):
@@ -258,9 +258,11 @@ class QPUnrolledNetwork(nn.Module):
         
         # comppute MCI Fx ≥ g
         if self.env_name == "double_integrator":
-            mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_safe_min"], self.mpc_baseline["states_safe_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=6)
+            # mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_safe_min"], self.mpc_baseline["states_safe_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], "double_integrator", iterations=10)
+            with open('double_integrator_mci.pkl', 'rb') as f:
+                mci_vertices = pickle.load(f)
             if mci_vertices.size > 0:
-                F, g = construct_polyhedron_from_mci(mci_vertices)
+                F, g = construct_polyhedron_from_mci(mci_vertices, "double_integrator")
             else:
                 F, g = None
         # elif self.env_name == "cartpole":
