@@ -116,7 +116,7 @@ class Integrated_env:
             # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 1
+            noise = 2
             v = (noise * torch.randn((self.bs, self.m), device=self.device))
             ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             ud = ud.clamp(self.env.u_min, self.env.u_max)
@@ -189,8 +189,8 @@ class Integrated_env:
             coef_survival = 10.0 
             coef_terminate = -1.
             zero_deviation_reward = 10.
-            near_zero_deviation = 0
-            coef_small_deviation = 0
+            near_zero_deviation = 1e-3
+            coef_small_deviation = 8000
         elif self.env_name == "cartpole":
             coef_safety = -200.0
             coef_deviation = -20.0

@@ -192,7 +192,7 @@ class LinearSystem():
         # 将K转为torch tensor类型
         K_tensor = torch.from_numpy(self.K).to(self.device)
         x_ref = torch.zeros((self.bs, self.n),device = self.device)
-        x_ref[:, 0] = self.x_ref
+        x_ref[:, 0] = self.x_ref.squeeze(-1)
         # LQR控制律
         if noise_level is None:
             action = K_tensor @ ((x_ref-self.x).T)
