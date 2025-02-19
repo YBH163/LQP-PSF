@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 torch.set_default_dtype(torch.float64)
 
 # seed
-seed = 42
+seed = 41
 random.seed(seed)
 np.random.seed(seed)
 torch.manual_seed(seed)
@@ -33,9 +33,25 @@ exp_name = f"test_lqr"
 state0 = [-1,0]
 x_ref = [0,0]
 
-env_name = "double_integrator"
-# 创建环境实例
-env = env_creators["double_integrator"](
+# env_name = "double_integrator"
+# # 创建环境实例
+# env = env_creators["double_integrator"](
+#     noise_level=noise_level,
+#     bs=bs,
+#     max_steps=300,
+#     keep_stats=True,
+#     run_name=exp_name,
+#     exp_name=exp_name,
+#     randomize=parametric_uncertainty,
+#     quiet = True,
+#     # Q = np.diag([10., 1e-4, 100., 1e-4]),
+#     # R = np.array([[1]]),
+#     device = device,
+#     env_name_ = env_name,
+# )
+
+env_name = "cartpole"
+env = env_creators[env_name](
     noise_level=noise_level,
     bs=bs,
     max_steps=300,
@@ -44,28 +60,12 @@ env = env_creators["double_integrator"](
     exp_name=exp_name,
     randomize=parametric_uncertainty,
     quiet = True,
-    # Q = np.diag([10., 1e-4, 100., 1e-4]),
+    # Q = np.diag([10., 0, 100., 0]),
     # R = np.array([[1]]),
     device = device,
     env_name_ = env_name,
+    random_seed = seed,
 )
-
-'''
-env_name = "cartpole"
-env = env_creators[env_name](
-    noise_level=noise_level,
-    bs=bs,
-    max_steps=100,
-    keep_stats=True,
-    run_name=exp_name,
-    exp_name=exp_name,
-    randomize=parametric_uncertainty,
-    quiet = True,
-    # Q = np.diag([10., 0, 100., 0]),
-    # R = np.array([[1]]),
-    device = device
-)
-'''
 
 # 收集数据的函数
 def collect_data(env, num_episodes, save_interval, csv_file):    
@@ -218,9 +218,15 @@ def plot_states_controls(states, controls):
     if env_name == "cartpole":
         for i, state_label in enumerate(['x', 'x_dot', 'theta', 'theta_dot', 'x_ref']):
             plt.plot(state_array[:,i], label=f'{state_label}')
+            plt.axhline(y=0.5, color='gray', linestyle='--')
+            plt.axhline(y=-0.5, color='gray', linestyle='--')
+            plt.axhline(y=1.8, color='gray', linestyle='--')
+            plt.axhline(y=-1.8, color='gray', linestyle='--')
     elif env_name == "double_integrator":
         for i, state_label in enumerate(['x', 'x_dot', 'x_ref']):
             plt.plot(state_array[:,i], label=f'{state_label}')
+            plt.axhline(y=0.5, color='gray', linestyle='--')
+            plt.axhline(y=-0.5, color='gray', linestyle='--')
     
     plt.xlabel('Time Step')
     plt.ylabel('State Value')

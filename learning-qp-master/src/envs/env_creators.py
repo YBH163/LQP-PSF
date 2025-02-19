@@ -76,7 +76,7 @@ sys_param = {
         "l_nom": 0.55,
         # "Q": np.diag([1., 1e-4, 1., 1e-4]),
         # "R": np.array([[1e-4]]),
-        "Q": np.diag([10., 1e-4, 100., 1e-4]),
+        "Q": np.diag([10., 1e-6, 100., 1e-6]),
         "R": np.array([[1]]),
         "x_min": -2,
         "x_max": 2,

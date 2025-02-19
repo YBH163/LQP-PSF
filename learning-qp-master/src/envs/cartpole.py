@@ -295,8 +295,24 @@ class CartPole():
 
     def generate_ref(self, size):
         """Generates and returns reference positions of given size."""
-        # x_ref = self.x_safe_min + (self.x_safe_max - self.x_safe_min) * torch.rand((size,), device=self.device, generator=self.rng_initial)
-        x_ref =  torch.zeros((size,), device=self.device)   # zero reference
+        # x_ref = self.x_safe_min + (self.x_safe_max - self.x_safe_min) * torch.rand((size,), device=self.device, generator=self.rng_initial)       # random reference
+
+        # x_ref =  torch.zeros((size,), device=self.device)   # zero reference
+
+        # 生成随时间变化的参考轨迹(sin)
+        t = self.step_count.float() / self.max_steps
+        x_ref = torch.zeros((size,), device=self.device)
+        
+        # 示例：使用正弦波生成参考轨迹
+        t = t.unsqueeze(1).to(x_ref.dtype)  # (bs, 1)
+        val = torch.sin(2 * torch.pi * t)  # (bs, 1)
+        val = val.squeeze(-1)       # (bs,)
+        
+        x_safe_min = self.x_safe_min
+        x_safe_max = self.x_safe_max
+        
+        x_ref = 0.5 * (x_safe_max - x_safe_min) * val + 0.5 * (x_safe_max + x_safe_min)
+        
         return x_ref
 
     def generate_initial(self, size):
@@ -343,7 +359,8 @@ class CartPole():
         size = is_done.sum().item()
         self.step_count[is_done] = 0
         self.cumulative_cost[is_done] = 0.
-        self.x_ref[is_done] = self.generate_ref(size) if x_ref is None else x_ref
+        # self.x_ref[is_done] = self.generate_ref(size) if x_ref is None else x_ref
+        self.x_ref[is_done] = torch.zeros((size, ), device=self.device)    # 所有done了的都从0开始吧。
         if x is None:
             x, x_dot, theta, theta_dot = self.generate_initial(size)
         else:
@@ -413,6 +430,7 @@ class CartPole():
         self.u = u
         # self.cumulative_cost += self.cost()
         self.step_count += 1
+        self.x_ref = self.generate_ref(self.bs)  # 更新参考状态
 
         # Construct batch of matrices, each being [m_cart + m_pole, m_pole * l * cos(theta); m_pole * L * cos(theta), m_pole * l ^ 2]
         lhs_mat = torch.stack([
