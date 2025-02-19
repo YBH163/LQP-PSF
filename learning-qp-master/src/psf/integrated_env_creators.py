@@ -116,7 +116,7 @@ class Integrated_env:
             # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 2
+            noise = 15
             v = (noise * torch.randn((self.bs, self.m), device=self.device))
             ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             ud = ud.clamp(self.env.u_min, self.env.u_max)
@@ -343,6 +343,8 @@ class Integrated_env:
                 # 在 y=0.5 和 y=-0.5 处绘制水平虚线
                 plt.axhline(y=0.5, color='gray', linestyle='--')
                 plt.axhline(y=-0.5, color='gray', linestyle='--')
+                plt.axhline(y=2, color='gray', linestyle='--')
+                plt.axhline(y=-2, color='gray', linestyle='--')
         elif self.env_name == "double_integrator":
             for i, state_label in enumerate(['x', 'x_dot', 'x_ref']):
                 plt.plot(state_array[:,i], label=f'{state_label}')

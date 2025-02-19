@@ -135,7 +135,7 @@ class CartPole():
         # Statistics for testing
         self.keep_stats = keep_stats
         self.already_on_stats = torch.zeros((bs,), dtype=torch.uint8, device=device)   # Each worker can only contribute once to the statistics, to avoid bias towards shorter episodes
-        self.stats = pd.DataFrame(columns=['initial_state', 'x_ref', 'episode_length', 'cumulative_cost', 'constraint_violated'])
+        self.stats = pd.DataFrame(columns=['i', 'initial_state', 'x_ref', 'episode_length', 'cumulative_cost', 'constraint_violated'])
 
         self.info_dict = {}
         
@@ -182,6 +182,8 @@ class CartPole():
         # Safety constraints
         self.x_safe_min = self.x_min + 0.2
         self.x_safe_max = self.x_max - 0.2
+        # self.x_safe_min = self.x_min
+        # self.x_safe_max = self.x_max
         self.theta_safe_min = self.theta_min / 2.0
         self.theta_safe_max = self.theta_max / 2.0
         
@@ -308,8 +310,10 @@ class CartPole():
         val = torch.sin(2 * torch.pi * t)  # (bs, 1)
         val = val.squeeze(-1)       # (bs,)
         
-        x_safe_min = self.x_safe_min
-        x_safe_max = self.x_safe_max
+        x_safe_min = self.x_safe_min + 0.2
+        x_safe_max = self.x_safe_max - 0.2
+        # x_safe_min = self.x_min
+        # x_safe_max = self.x_max
         
         x_ref = 0.5 * (x_safe_max - x_safe_min) * val + 0.5 * (x_safe_max + x_safe_min)
         
@@ -410,18 +414,19 @@ class CartPole():
         episode_length = self.step_count[i].item()
         cumulative_cost = self.cumulative_cost[i].item()
         constraint_violated = (self.is_done[i] == 1).item()
-        self.stats.loc[len(self.stats)] = [initial_state, x_ref, episode_length, cumulative_cost, constraint_violated]
+        self.stats.loc[len(self.stats)] = [i.item(), initial_state, x_ref, episode_length, cumulative_cost, constraint_violated]
 
     def dump_stats(self, filename=None):
         """Dumps statistics to a CSV file."""
-        if filename is None:
-            directory = "test_results"
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            tag = self.run_name
-            filename = os.path.join(directory, f"{tag}_{timestamp}.csv")
-        self.stats.to_csv(filename, index=False)
+        # if filename is None:
+        #     directory = "test_results"
+        #     if not os.path.exists(directory):
+        #         os.makedirs(directory)
+        #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        #     tag = self.run_name
+        #     filename = os.path.join(directory, f"{tag}_{timestamp}.csv")
+        # self.stats.to_csv(filename, index=False)
+        return self.stats
 
     def step(self, u):
         """Takes a step in the environment with control input u and returns the new observation, reward, done flag, and info."""
