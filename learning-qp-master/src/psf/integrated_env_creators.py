@@ -57,7 +57,8 @@ class Integrated_env:
         elif env_name == "cartpole":
             # self.noise_values = [0., 1., 3., 5., 6., 7., 8., 9., 10., 12., 15.]  # 可选的noise值
             self.noise_values = [0.,0., 0.5, 1., 2., 3., 5., 6., 7., 8., 10., 12., 15.]
-            self.noise = 5 * torch.ones((self.bs, 1), device=self.device)   # 初始默认值
+            # self.noise_values = [0.,0., 0., 0.5, 1., 2., 3., 5., 8., 10., 12., 15.]
+            self.noise = 1 * torch.ones((self.bs, 1), device=self.device)   # 初始默认值
         elif env_name == "tank":
             self.noise_values = [0., 0., 0.05, 0.1, 0.3, 0.5, 1., 2., 3., 5., 8.]
             self.noise = 0.1 * torch.ones((self.bs, self.m), device=self.device)   # 初始默认值
@@ -116,7 +117,7 @@ class Integrated_env:
             # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 15
+            noise = 10
             v = (noise * torch.randn((self.bs, self.m), device=self.device))
             ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             ud = ud.clamp(self.env.u_min, self.env.u_max)
@@ -196,9 +197,9 @@ class Integrated_env:
             coef_deviation = -20.0
             coef_survival = 100.0  
             coef_terminate = -1000000.
-            zero_deviation_reward = 80.
-            near_zero_deviation = 1e-3
-            coef_small_deviation = 60000
+            zero_deviation_reward = 100.
+            near_zero_deviation = 1e-2
+            coef_small_deviation = 10000
             # initial
             # coef_safety = -2000.0
             # coef_deviation = 50.0
