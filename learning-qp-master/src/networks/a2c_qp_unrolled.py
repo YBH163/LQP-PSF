@@ -68,12 +68,14 @@ class A2CQPUnrolled(A2CBuilder.Network):
             'norm_func_name' : self.normalization,
             'dense_func' : torch.nn.Linear,
             'd2rl' : self.is_d2rl,
-            'norm_only_first_layer' : self.norm_only_first_layer
+            'norm_only_first_layer' : self.norm_only_first_layer,
+            # 'device' : self.device,
         }
         self.value_net = self._build_mlp(**value_mlp_args)
+        self.value_net.to(self.device)
 
         sigma_init = self.init_factory.create(**self.space_config['sigma_init'])
-        self.sigma = nn.Parameter(torch.zeros(self.actions_num, requires_grad=True, dtype=torch.float32), requires_grad=True)
+        self.sigma = nn.Parameter(torch.zeros(self.actions_num, requires_grad=True, dtype=torch.float32), requires_grad=True).to(self.device)
 
         mlp_init = self.init_factory.create(**self.initializer)
 
@@ -113,6 +115,7 @@ class A2CQPUnrolled(A2CBuilder.Network):
         obs = obs.double()
         info = obs_dict.get('info', {})
         mu = self.policy_net(obs, info=info)[:, :self.actions_num]
+        self.value_net = self.value_net.to(self.device)
         value = self.value_net(obs)
         sigma = self.sigma
         states = None   # reserved for RNN

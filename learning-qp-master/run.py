@@ -148,6 +148,7 @@ runner_config["params"]["config"]["name"] = args.env
 runner_config["params"]["config"]["full_experiment_name"] = full_experiment_name
 runner_config["params"]["network"]["mlp"]["units"] = [args.mlp_size_last * i for i in (4, 2, 1)]
 runner_config["params"]["config"]["save_frequency"] = args.save_freq
+runner_config["params"]["config"]["device_name"] = args.device
 runner_config["params"]["config"]["device"] = args.device
 runner_config["params"]["network"].pop("rnn")
 runner_config["params"]["config"]["learning_rate"] = args.initial_lr
@@ -159,6 +160,7 @@ if args.batch_test:
     runner_config["params"]["config"]["player"]["games_num"] = args.num_parallel
 
 if args.qp_unrolled:
+    runner_config["params"]["config"]["clip_actions"] = False
     runner_config["params"]["network"]["name"] = "qp_unrolled"
     runner_config["params"]["network"]["custom"] = {
         "device": args.device,

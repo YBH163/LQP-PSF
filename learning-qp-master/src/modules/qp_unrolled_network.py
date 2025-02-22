@@ -143,6 +143,7 @@ class QPUnrolledNetwork(nn.Module):
             if not self.strict_affine_layer:
                 # only input x0(states) for computing b (just for double integrator)
                 self.qb_affine_layer = nn.Linear(input_size, self.n_b_param, bias=not self.symmetric).to(self.device)
+                # device_1 = self.qb_affine_layer.weight.device
             else:
                 self.qb_affine_layer = StrictAffineLayer(input_size, self.n_qp, self.m_qp, self.obs_has_half_ref).to(self.device)
 
@@ -391,6 +392,8 @@ class QPUnrolledNetwork(nn.Module):
             end = start + self.n_b_param
             b = mlp_out[:, start:end]
         else:
+            # x = x.to(self.qb_affine_layer.weight.device)
+            self.qb_affine_layer = self.qb_affine_layer.to(self.device)
             b_out = self.qb_affine_layer(x)
             b = b_out[:, :self.n_b_param]
         if self.no_b:
