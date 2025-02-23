@@ -194,12 +194,12 @@ class Integrated_env:
             coef_small_deviation = 8000
         elif self.env_name == "cartpole":
             coef_safety = -200.0
-            coef_deviation = -30.0
+            coef_deviation = -20.0
             coef_survival = 100.0  
             coef_terminate = -1000000.
-            zero_deviation_reward = 100.
+            zero_deviation_reward = 150.
             near_zero_deviation = 1e-2
-            coef_small_deviation = 10000
+            coef_small_deviation = 15000
             # initial
             # coef_safety = -2000.0
             # coef_deviation = 50.0
