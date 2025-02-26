@@ -116,7 +116,7 @@ class Integrated_env:
             # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 0
+            noise = 1
             v = (noise * torch.randn((self.bs, self.m), device=self.device))
             ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             ud = ud.clamp(self.env.u_min, self.env.u_max)
@@ -197,7 +197,7 @@ class Integrated_env:
             coef_survival = 100.0  
             coef_terminate = -1000000.
             zero_deviation_reward = 80.
-            near_zero_deviation = 0.1
+            near_zero_deviation = 0.01
             coef_small_deviation = 600
             # initial
             # coef_safety = -2000.0

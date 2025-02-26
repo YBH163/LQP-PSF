@@ -159,6 +159,7 @@ if args.batch_test:
     runner_config["params"]["config"]["player"]["games_num"] = args.num_parallel
 
 if args.qp_unrolled:
+    runner_config["params"]["config"]["clip_actions"] = False
     runner_config["params"]["network"]["name"] = "qp_unrolled"
     runner_config["params"]["network"]["custom"] = {
         "device": args.device,
