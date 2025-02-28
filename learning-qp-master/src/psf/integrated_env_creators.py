@@ -14,6 +14,7 @@ from datetime import datetime
 class Integrated_env:
     def __init__(self, env_name, **kwargs):
         self.env_name = env_name
+        self.exp_name = kwargs["exp_name"]
         self.env = env_creators[env_name](**kwargs)
         self.bs = self.env.bs
         self.device = self.env.device
@@ -62,6 +63,8 @@ class Integrated_env:
             self.noise_values = [0., 0., 0.05, 0.1, 0.3, 0.5, 1., 2., 3., 5., 8.]
             self.noise = 0.1 * torch.ones((self.bs, self.m), device=self.device)   # 初始默认值
         
+        self.noise_test = 0
+
         self.stats = pd.DataFrame(columns=['i', 'cumulative_deviation'])
         self.cum_deviation = torch.zeros((self.bs,), device=self.device)
         self.already_on_stats = torch.zeros((self.bs,), dtype=torch.uint8, device=self.device)   # Each worker can only contribute once to the statistics, to avoid bias towards shorter episodes
@@ -116,8 +119,8 @@ class Integrated_env:
             # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 1
-            v = (noise * torch.randn((self.bs, self.m), device=self.device))
+            self.noise_test = 0
+            v = (self.noise_test * torch.randn((self.bs, self.m), device=self.device))
             ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             ud = ud.clamp(self.env.u_min, self.env.u_max)
             
@@ -187,10 +190,10 @@ class Integrated_env:
             coef_safety = -120.0
             coef_deviation = -50.0
             coef_survival = 10.0 
-            coef_terminate = -1.
+            coef_terminate = -1000000.
             zero_deviation_reward = 10.
-            near_zero_deviation = 0
-            coef_small_deviation = 0
+            near_zero_deviation = 1e-4
+            coef_small_deviation = 100000
         elif self.env_name == "cartpole":
             coef_safety = -200.0
             coef_deviation = -20.0
@@ -265,12 +268,12 @@ class Integrated_env:
         self.reset_done_envs()
         
         # 用ud进行测试时
-        # original_obs, original_reward, done, info = self.env.step(self.ud)   
-        # reward = self.reward(original_reward, self.ud)
-
-        action = input_action
-        
+        # action = self.ud
         # 正常测试
+        action = input_action
+
+        action = action.clamp(self.env.u_min, self.env.u_max)
+        
         original_obs, original_reward, done, info = self.env.step(action)   
         reward = self.reward(original_reward, action)
         
@@ -357,7 +360,8 @@ class Integrated_env:
         
         plt.xlabel('Time Step')
         plt.ylabel('State Value')
-        plt.title('State Over Time')
+        # plt.title('State Over Time')
+        plt.title(f'State Over Time (noise_std = {self.noise_test})')
         plt.legend()
 
         plt.subplot(2, 1, 2)
@@ -365,12 +369,28 @@ class Integrated_env:
         plt.plot(self.uds, label='ud')
         plt.xlabel('Time Step')
         plt.ylabel('Control Value')
-        plt.title('Control Over Time')
+        # plt.title('Control Over Time')
+        plt.title(f'Control Over Time (noise_std = {self.noise_test})')
         plt.legend()
 
         plt.tight_layout()
-        plt.show()
-        plt.savefig("psf_trajectory.png")  # 保存图表
+        # plt.show()
+
+        directory = 'trajectories'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        # 构造保存路径
+        env_dir = os.path.join(directory, self.env_name)  
+        os.makedirs(env_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+        save_dir = os.path.join(env_dir, self.exp_name)  
+        os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+        # 格式化文件名（保留2位小数）
+        filename = f"trajectory_noise{self.noise_test:.2f}.png"
+        # 组合完整路径并保存
+        save_path = os.path.join(save_dir, filename)
+        plt.savefig(save_path, bbox_inches='tight')  # bbox_inches防止截断
+
+        # plt.savefig("psf_trajectory.png")  # 保存图表
         plt.close()
 
 integrated_env_creators = {

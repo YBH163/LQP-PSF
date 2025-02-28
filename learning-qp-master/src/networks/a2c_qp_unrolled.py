@@ -7,6 +7,8 @@ import atexit
 from datetime import datetime
 import os
 import numpy as np
+import time
+import csv
 
 class A2CQPUnrolled(A2CBuilder.Network):
     def __init__(self, params, **kwargs):   # where to find the kwargs??
@@ -17,6 +19,8 @@ class A2CQPUnrolled(A2CBuilder.Network):
         NetworkBuilder.BaseNetwork.__init__(self)
         self.n_obs = input_shape[0]
         self.load(params)
+        self.mu_times = []
+        self.csv_filename = "mu_times.csv"
 
         if self.separate:
             raise NotImplementedError()
@@ -108,11 +112,28 @@ class A2CQPUnrolled(A2CBuilder.Network):
             running_time = self.policy_net.info['running_time']
             np.savetxt(filename, running_time, fmt='%f')
 
+    def write_mu_time_to_csv(self, mu_time):
+        # 将mu_time写入CSV文件
+        with open(self.csv_filename, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([mu_time])
+
     def forward(self, obs_dict):
         obs = obs_dict['obs']
         obs = obs.double()
         info = obs_dict.get('info', {})
-        mu = self.policy_net(obs, info=info)[:, :self.actions_num]
+        if self.is_test:
+            # 记录开始时间
+            start_time = time.time()
+            mu = self.policy_net(obs, info=info)[:, :self.actions_num]
+            # 记录结束时间
+            end_time = time.time()
+            # 计算并存储计算mu的时间
+            mu_time = end_time - start_time
+            self.mu_times.append(mu_time)
+            self.write_mu_time_to_csv(mu_time)  # 将时间写入CSV文件
+        else:
+            mu = self.policy_net(obs, info=info)[:, :self.actions_num]
         value = self.value_net(obs)
         sigma = self.sigma
         states = None   # reserved for RNN

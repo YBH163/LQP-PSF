@@ -9,6 +9,7 @@ import glob
 import copy
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import numpy as np
+import csv
 
 from rl_games.common import env_configurations, vecenv
 from rl_games.torch_runner import Runner
@@ -236,3 +237,21 @@ if __name__ == "__main__":
             'play': True,
             'checkpoint' : checkpoint_name,
         })
+        # print avg time
+        # CSV文件路径
+        csv_file_path = 'mu_times.csv'
+
+        # 读取CSV文件
+        with open(csv_file_path, mode='r', newline='') as file:
+            reader = csv.reader(file)
+            numbers = [float(row[0]) for row in reader if row]  # 读取每一行的第一个元素并转换为浮点数
+
+        # 计算平均值
+        if numbers:
+            average = sum(numbers) / len(numbers)
+            print(f"Average time: {average}")
+        else:
+            print("No numbers to calculate the average.")
+
+        # if os.path.exists(csv_file_path):
+        #     os.remove(csv_file_path)

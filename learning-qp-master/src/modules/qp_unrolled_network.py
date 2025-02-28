@@ -14,6 +14,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from ..utils.sets import compute_MCI, construct_polyhedron_from_mci
 from src.envs.env_creators import sys_param
+import pickle
 
 
 
@@ -251,6 +252,10 @@ class QPUnrolledNetwork(nn.Module):
         # Collecting the results
         self.robust_controllers.extend(results)
 
+    def load_double_integrator_mci(self, filename='double_integrator_mci.pkl'):
+        with open(filename, 'rb') as f:
+            return pickle.load(f)
+
     def run_mpc_baseline(self, x, use_osqp_oracle=False):
         robust_method = self.mpc_baseline.get("robust_method", None)
         x0, xref = self.mpc_baseline["obs_to_state_and_ref"](x)     # what is x0?
@@ -258,9 +263,11 @@ class QPUnrolledNetwork(nn.Module):
         
         # comppute MCI Fx ≥ g
         if self.env_name == "double_integrator":
-            mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_safe_min"], self.mpc_baseline["states_safe_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"], iterations=6)
+            mci_vertices = self.load_double_integrator_mci()
+    
+            # mci_vertices = compute_MCI(self.mpc_baseline["A"], self.mpc_baseline["B"], self.mpc_baseline["states_safe_min"], self.mpc_baseline["states_safe_max"], self.mpc_baseline["u_min"], self.mpc_baseline["u_max"],"double_integrator", iterations=6)
             if mci_vertices.size > 0:
-                F, g = construct_polyhedron_from_mci(mci_vertices)
+                F, g = construct_polyhedron_from_mci(mci_vertices, "double_integrator")
             else:
                 F, g = None
         # elif self.env_name == "cartpole":
