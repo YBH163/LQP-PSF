@@ -116,13 +116,13 @@ class Integrated_env:
         elif self.train_or_test == "test":    
             # bang-bang control (使用 torch.where 来向量化条件操作
             # ud = torch.where(theta >= 0.2, torch.full_like(theta, self.u_max), torch.where(theta <= -0.2, torch.full_like(theta, self.u_min), torch.zeros_like(theta)))
-            # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
+            ud = torch.where((self.step_count <= 80).unsqueeze(1), torch.full_like(self.ud, 1),  torch.zeros_like(self.ud))
             
             # LQR control
-            self.noise_test = 0
-            v = (self.noise_test * torch.randn((self.bs, self.m), device=self.device))
-            ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
-            ud = ud.clamp(self.env.u_min, self.env.u_max)
+            self.noise_test = -4
+            # v = (self.noise_test * torch.randn((self.bs, self.m), device=self.device))
+            # ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
+            # ud = ud.clamp(self.env.u_min, self.env.u_max)
             
         # ud = ud.squeeze(-1)
         self.ud = ud
@@ -268,9 +268,9 @@ class Integrated_env:
         self.reset_done_envs()
         
         # 用ud进行测试时
-        # action = self.ud
+        action = self.ud
         # 正常测试
-        action = input_action
+        # action = input_action
 
         action = action.clamp(self.env.u_min, self.env.u_max)
         
@@ -366,7 +366,7 @@ class Integrated_env:
 
         plt.subplot(2, 1, 2)
         plt.plot(self.us, label='u')
-        plt.plot(self.uds, label='ud')
+        # plt.plot(self.uds, label='ud')
         plt.xlabel('Time Step')
         plt.ylabel('Control Value')
         # plt.title('Control Over Time')
