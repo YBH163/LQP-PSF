@@ -372,8 +372,22 @@ class Integrated_env:
         plt.legend()
 
         plt.tight_layout()
-        plt.show()
-        plt.savefig("psf_trajectory.png")  # 保存图表
+
+        # directory = 'trajectories'
+        # if not os.path.exists(directory):
+        #     os.makedirs(directory)
+        # # 构造保存路径
+        # env_dir = os.path.join(directory, self.env_name)  
+        # os.makedirs(env_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+        # save_dir = os.path.join(env_dir, self.exp_name)  
+        # os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+        # # 格式化文件名（保留2位小数）
+        # filename = f"trajectory_noise{self.noise_test:.2f}.png"
+        # # 组合完整路径并保存
+        # save_path = os.path.join(save_dir, filename)
+        # plt.savefig(save_path, bbox_inches='tight')  # bbox_inches防止截断
+
+        # # plt.savefig("psf_trajectory.png")  # 保存图表
         plt.close()
 
 integrated_env_creators = {
