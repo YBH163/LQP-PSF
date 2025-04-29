@@ -14,6 +14,8 @@ from datetime import datetime
 class Integrated_env:
     def __init__(self, env_name, **kwargs):
         self.env_name = env_name
+        self.exp_name = kwargs["exp_name"]
+        self.noise_test = 0
         self.env = env_creators[env_name](**kwargs)
         self.bs = self.env.bs
         self.device = self.env.device
@@ -117,8 +119,8 @@ class Integrated_env:
             # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            noise = 0
-            v = (noise * torch.randn((self.bs, self.m), device=self.device))
+            self.noise_test = 10
+            v = (self.noise_test * torch.randn((self.bs, self.m), device=self.device))
             ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             ud = ud.clamp(self.env.u_min, self.env.u_max)
             
@@ -360,7 +362,8 @@ class Integrated_env:
         
         plt.xlabel('Time Step')
         plt.ylabel('State Value')
-        plt.title('State Over Time')
+        # plt.title('State Over Time')
+        plt.title(f'State Over Time (noise_std = {self.noise_test})')
         plt.legend()
 
         plt.subplot(2, 1, 2)
@@ -368,24 +371,25 @@ class Integrated_env:
         plt.plot(self.uds, label='ud')
         plt.xlabel('Time Step')
         plt.ylabel('Control Value')
-        plt.title('Control Over Time')
+        # plt.title('Control Over Time')
+        plt.title(f'Control Over Time (noise_std = {self.noise_test})')
         plt.legend()
 
         plt.tight_layout()
 
-        # directory = 'trajectories'
-        # if not os.path.exists(directory):
-        #     os.makedirs(directory)
-        # # 构造保存路径
-        # env_dir = os.path.join(directory, self.env_name)  
-        # os.makedirs(env_dir, exist_ok=True)  # 自动创建目录（如果不存在）
-        # save_dir = os.path.join(env_dir, self.exp_name)  
-        # os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
-        # # 格式化文件名（保留2位小数）
-        # filename = f"trajectory_noise{self.noise_test:.2f}.png"
-        # # 组合完整路径并保存
-        # save_path = os.path.join(save_dir, filename)
-        # plt.savefig(save_path, bbox_inches='tight')  # bbox_inches防止截断
+        directory = 'trajectories'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        # 构造保存路径
+        env_dir = os.path.join(directory, self.env_name)  
+        os.makedirs(env_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+        save_dir = os.path.join(env_dir, self.exp_name)  
+        os.makedirs(save_dir, exist_ok=True)  # 自动创建目录（如果不存在）
+        # 格式化文件名（保留2位小数）
+        filename = f"trajectory_noise{self.noise_test:.2f}.png"
+        # 组合完整路径并保存
+        save_path = os.path.join(save_dir, filename)
+        plt.savefig(save_path, bbox_inches='tight')  # bbox_inches防止截断
 
         # # plt.savefig("psf_trajectory.png")  # 保存图表
         plt.close()
