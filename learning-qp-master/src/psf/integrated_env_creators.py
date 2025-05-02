@@ -119,7 +119,7 @@ class Integrated_env:
             # ud = torch.where((self.step_count <= 50).unsqueeze(1), torch.full_like(self.ud, -1),  torch.zeros_like(self.ud))
             
             # LQR control
-            self.noise_test = 10
+            self.noise_test = 5
             v = (self.noise_test * torch.randn((self.bs, self.m), device=self.device))
             ud = self.env.get_action_LQR(noise_level = 0) + v  # 双重噪声（感觉太难了，先换成单重了。
             ud = ud.clamp(self.env.u_min, self.env.u_max)
@@ -268,14 +268,14 @@ class Integrated_env:
         self.reset_done_envs()
         
         # 用ud进行测试时
-        # original_obs, original_reward, done, info = self.env.step(self.ud)   
-        # reward = self.reward(original_reward, self.ud)
+        original_obs, original_reward, done, info = self.env.step(self.ud)   
+        reward = self.reward(original_reward, self.ud)
 
         action = input_action
         
         # 正常测试
-        original_obs, original_reward, done, info = self.env.step(action)   
-        reward = self.reward(original_reward, action)
+        # original_obs, original_reward, done, info = self.env.step(action)   
+        # reward = self.reward(original_reward, action)
         
         self.step_count = self.env.step_count
         
@@ -368,7 +368,7 @@ class Integrated_env:
 
         plt.subplot(2, 1, 2)
         plt.plot(self.us, label='u')
-        plt.plot(self.uds, label='ud')
+        # plt.plot(self.uds, label='ud')
         plt.xlabel('Time Step')
         plt.ylabel('Control Value')
         # plt.title('Control Over Time')
