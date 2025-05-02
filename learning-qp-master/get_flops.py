@@ -1,4 +1,5 @@
 
+# for MLP and LQP, baseline is incorrect
 import numpy as np
 
 def affine_layer_flops(input_size, output_size, has_bias, has_relu):
@@ -56,9 +57,9 @@ def mlp_flops(input_size, output_size, hidden_layers):
 if __name__ == "__main__":
     # 示例参数设置
     n_sys = 4       # 系统状态维度（例如倒立摆的4维状态）
-    m_sys = 2       # 控制输入维度（单输入系统）
-    N = 10          # MPC预测步长
-    qp_iter = 10    # QP求解器迭代次数
+    m_sys = 1       # 控制输入维度（单输入系统）
+    N = 4          # MPC预测步长
+    qp_iter = 30    # QP求解器迭代次数
     
     # 生成模拟的MPC迭代次数（正态分布）
     np.random.seed(42)
@@ -83,6 +84,7 @@ if __name__ == "__main__":
     print(f"MLP网络 [64,32, 16]: {mlp_total:,} FLOPS")
 
 '''
+# for baseline
 # %%
 from glob import glob
 import pandas as pd

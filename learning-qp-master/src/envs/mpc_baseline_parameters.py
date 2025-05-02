@@ -85,6 +85,8 @@ def get_mpc_baseline_parameters(env_name, N, noise_std=0.):
 
         mpc_parameters["A"] = A
         mpc_parameters["B"] = B
+        mpc_parameters["u_min"] = np.array([-10])
+        mpc_parameters["u_max"] = np.array([10])
         
         F = np.array([
             [1., 0., 0., 0.],

@@ -103,8 +103,11 @@ class A2CQPUnrolled(A2CBuilder.Network):
             # When MPC is run using OSQP, dump the iteration counts (collected by QPUnrolledNetwork) to CSV
             tag = f"{self.run_name}_mpc_iter_count"
             filename = os.path.join(directory, f"{tag}_{timestamp}.csv")
-            iter_counts = self.policy_net.info['osqp_iter_counts']
-            np.savetxt(filename, iter_counts, fmt='%d')
+            # iter_counts = self.policy_net.info['osqp_iter_counts']
+            # 使用 get 方法避免 KeyError
+            iter_counts = self.policy_net.info.get('osqp_iter_counts', [])
+            if iter_counts:
+                np.savetxt(filename, iter_counts, fmt='%d')
         if self.mpc_baseline is not None and self.mpc_baseline.get("robust_method", None) is not None:
             # When robust MPC is used, dump the per-step times (collected by QPUnrolledNetwork) to CSV
             tag = f"{self.run_name}_running_time"
