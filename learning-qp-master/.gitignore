@@ -164,6 +164,8 @@ cython_debug/
 
 runs/
 data/
+test_results/
+trajectories/
 auxiliary/models
 auxiliary/*.csv
 experiments/tank/run1.sh
